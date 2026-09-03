@@ -4,6 +4,8 @@ import exceptions.ImageNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import ru.nsu.marketplace.dto.CreateProductRequest;
 import ru.nsu.marketplace.dto.ProductCardResponse;
@@ -20,11 +22,9 @@ import java.util.UUID;
 public class ProductService {
     public final ProductCardsRepository repository;
 
-    public List<ProductCardResponse> getAll(){
-        return repository.findAll()
-                .stream()
-                .map(this::toResponse)
-                .toList();
+    public Page<ProductCardResponse> getAll(Pageable pageable){
+        return repository.findAll(pageable)
+                .map(this::toResponse);
     }
 
     public ProductCardResponse getById(UUID id){
