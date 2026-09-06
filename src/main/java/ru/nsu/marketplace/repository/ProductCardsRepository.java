@@ -13,5 +13,4 @@ import java.util.UUID;
 @Repository
 public interface ProductCardsRepository extends JpaRepository<ProductCardEntity, Long> {
     Optional<ProductCardEntity> findByPublicId(UUID publicID);
-    Page<ProductCardEntity> findAll(Pageable pageable);
 }
