@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -30,4 +32,8 @@ public class ProductEntity {
 
     @Column(nullable = false)
     private String description;
+
+    @OneToMany(mappedBy = "product")
+    @OrderBy("position ASC")
+    private List<ProductDetailsImageEntity> detailsImages = new ArrayList<>();
 }

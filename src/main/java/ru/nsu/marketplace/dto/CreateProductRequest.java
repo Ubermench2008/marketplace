@@ -28,10 +28,5 @@ public record CreateProductRequest(
         @NotNull(message = "Price is required")
         @DecimalMin(value = "0.01", message = "Price must be greater than zero")
         @Digits(integer = 9, fraction = 2)
-        BigDecimal price,
-
-        @NotBlank(message = "Image URL is required")
-        String imgUrl
-
-
+        BigDecimal price
 ) {}

@@ -12,17 +12,17 @@ import org.springframework.data.domain.Sort;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import ru.nsu.marketplace.StaticMethods;
 import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
 
 import java.math.BigDecimal;
-import java.sql.Array;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static ru.nsu.marketplace.StaticMethods.getTestEntity;
+import static ru.nsu.marketplace.StaticMethods.getTestProductCardEntity;
 
 @DataJpaTest
 @Testcontainers
@@ -40,26 +40,25 @@ public class ProductCardsRepositoryTest {
             new PostgreSQLContainer("postgres:16");
 
     @Test
-    void shouldSaveAndFindProductCardByPublicId() {
+    void shouldSaveProductCard() {
         UUID uuid = UUID.randomUUID();
 
         ProductCardEntity entity = new ProductCardEntity();
-        entity.setPublicId(uuid);
         entity.setImgUrl("/media/products/iphone.webp");
 
         ProductEntity product = new ProductEntity();
-        product.setPublicId(UUID.randomUUID());
+        product.setPublicId(uuid);
         product.setSlug("iphone-16-pro");
         product.setName("iPhone 16 Pro");
         product.setPrice(new BigDecimal("99990.00"));
         product.setDescription("A sufficiently long product description for tests.");
         entity.setProduct(productRepository.save(product));
 
-        repository.save(entity);
+        ProductCardEntity saved = repository.save(entity);
 
-        ProductCardEntity result = repository.findByPublicId(uuid).orElseThrow();
+        ProductCardEntity result = repository.findById(saved.getId()).orElseThrow();
 
-        assertThat(result.getPublicId()).isEqualTo(uuid);
+        assertThat(result.getProduct().getPublicId()).isEqualTo(uuid);
         assertThat(result.getProduct().getSlug()).isEqualTo("iphone-16-pro");
         assertThat(result.getProduct().getName()).isEqualTo("iPhone 16 Pro");
         assertThat(result.getProduct().getPrice())
@@ -70,14 +69,18 @@ public class ProductCardsRepositoryTest {
     void shouldReturnCorrectProductCardPage() {
         List<ProductCardEntity> testEntities = new ArrayList<>();
 
-        for (int i = 0; i < 10; i++) { testEntities.add(getTestEntity(UUID.randomUUID())); }
+        for (int i = 0; i < 10; i++) {
+            ProductCardEntity entity = StaticMethods.getTestProductCardEntity(UUID.randomUUID());
+            entity.getProduct().setSlug("iphone-16-pro-" + i);
+            testEntities.add(entity);
+        }
 
         testEntities.forEach(entity -> {
             entity.setProduct(productRepository.save(entity.getProduct()));
             repository.save(entity);
         });
 
-        Pageable pageable = PageRequest.of(1, 5, Sort.by(Sort.Direction.ASC, "name"));
+        Pageable pageable = PageRequest.of(1, 5, Sort.by(Sort.Direction.ASC, "product.name"));
 
         Page<ProductCardEntity> result = repository.findAll(pageable);
 
