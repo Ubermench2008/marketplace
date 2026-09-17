@@ -18,6 +18,7 @@ import ru.nsu.marketplace.dto.ProductDetailsResponse;
 import ru.nsu.marketplace.dto.ImagesDetailsResponse;
 import ru.nsu.marketplace.dto.UpdateImagesPositionsRequest;
 import ru.nsu.marketplace.dto.UpdateProductRequest;
+import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import ru.nsu.marketplace.service.ProductService;
 
 import java.math.BigDecimal;
@@ -154,7 +155,7 @@ public class ProductControllerTest {
         UUID id = UUID.randomUUID();
 
         when(service.getProduct(id))
-                .thenThrow(new exceptions.ProductNotFoundException("Product not found"));
+                .thenThrow(new ProductNotFoundException("Product not found"));
 
         mockMvc.perform(get("/api/products/{id}", id))
                 .andExpect(status().isNotFound())

@@ -1,6 +1,6 @@
 package ru.nsu.marketplace.service;
 
-import exceptions.ProductNotFoundException;
+import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import org.springframework.data.domain.Page;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

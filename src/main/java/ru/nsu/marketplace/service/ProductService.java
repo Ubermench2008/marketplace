@@ -1,8 +1,7 @@
 package ru.nsu.marketplace.service;
 
-import exceptions.ProductNotFoundException;
+import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,7 +15,6 @@ import ru.nsu.marketplace.repository.ProductCardsRepository;
 import ru.nsu.marketplace.repository.ProductDetailsImageRepository;
 import ru.nsu.marketplace.repository.ProductRepository;
 
-import java.net.http.HttpClient;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
