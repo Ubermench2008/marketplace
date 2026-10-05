@@ -1,6 +1,7 @@
 package ru.nsu.marketplace.config;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,7 @@ import ru.nsu.marketplace.service.PhoneNumberService;
 
 import java.util.Set;
 
+@Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class InitialAdminConfig {
@@ -30,6 +32,8 @@ public class InitialAdminConfig {
             try {
                 telephone = phoneNumberService.normalize(properties.telephone());
             } catch (InvalidPhoneNumberException exception) {
+                log.error("Initial admin bootstrap failed: invalid telephone", exception);
+
                 throw new InitialAdminInitializationException(
                         "Initial admin telephone is invalid",
                         exception
@@ -37,6 +41,8 @@ public class InitialAdminConfig {
             }
 
             if (userRepository.existsByTelephoneNumber(telephone)) {
+                log.info("Admin bootstrap was skipped: admin already exists");
+
                 return;
             }
 
@@ -47,6 +53,8 @@ public class InitialAdminConfig {
             admin.setRoles(Set.of(Role.ADMIN));
 
             userRepository.save(admin);
+
+            log.info("Admin bootstrap was created: id={}", admin.getId());
         };
     }
 }

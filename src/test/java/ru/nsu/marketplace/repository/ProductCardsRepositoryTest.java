@@ -1,6 +1,5 @@
 package ru.nsu.marketplace.repository;
 
-
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -22,12 +21,10 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static ru.nsu.marketplace.StaticMethods.getTestProductCardEntity;
 
 @DataJpaTest
 @Testcontainers
 public class ProductCardsRepositoryTest {
-
     @Autowired
     private ProductCardsRepository repository;
 

@@ -1,5 +1,7 @@
 package ru.nsu.marketplace.controller;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import ru.nsu.marketplace.dto.error.ApiErrorResponse;
@@ -14,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
     @ExceptionHandler({EmailAlreadyExistException.class, NumberAlreadyExistException.class})
     public ResponseEntity<ApiErrorResponse> handleUserAlreadyExists(RuntimeException exception) {
@@ -82,6 +85,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
+    @ExceptionHandler(CartNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleCartNotFound(CartNotFoundException exception) {
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                exception.getMessage(),
+                List.of(),
+                Instant.now()
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidLogin(InvalidCredentialsException exception) {
         ApiErrorResponse response = new ApiErrorResponse(
@@ -118,5 +133,23 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiErrorResponse> handleUnexpectedException(Exception exception) throws Exception {
+        if (exception instanceof AccessDeniedException) {
+            throw exception;
+        }
+
+        log.error("Unexpected server error", exception);
+
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "Internal server error",
+                List.of(),
+                Instant.now()
+        );
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 }

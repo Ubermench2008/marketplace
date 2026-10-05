@@ -1,12 +1,12 @@
 package ru.nsu.marketplace.service;
 
-import ru.nsu.marketplace.exceptions.ProductNotFoundException;
-import org.springframework.data.domain.Page;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,31 +19,28 @@ import ru.nsu.marketplace.dto.ProductDetailsResponse;
 import ru.nsu.marketplace.dto.ImagesDetailsResponse;
 import ru.nsu.marketplace.dto.UpdateImagesPositionsRequest;
 import ru.nsu.marketplace.dto.UpdateProductRequest;
-
 import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductDetailsImageEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
+import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import ru.nsu.marketplace.repository.ProductCardsRepository;
 import ru.nsu.marketplace.repository.ProductDetailsImageRepository;
 import ru.nsu.marketplace.repository.ProductRepository;
-import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static ru.nsu.marketplace.StaticMethods.getTestProductCardEntity;
 
 @ExtendWith(MockitoExtension.class)
 public class ProductServiceTest {
     @Mock
-    private ProductCardsRepository repository;
+    private ProductCardsRepository productCardsRepository;
 
     @Mock
     private ProductRepository productRepository;
@@ -58,14 +55,14 @@ public class ProductServiceTest {
     private ProductService service;
 
     @Test
-    void shouldReturnCards(){
+    void shouldReturnCards() {
         ProductCardEntity entity = StaticMethods.getTestProductCardEntity(UUID.randomUUID());
 
-        Pageable pageable = PageRequest.of(0,2);
+        Pageable pageable = PageRequest.of(0, 2);
 
         Page<ProductCardEntity> page = new PageImpl<>(List.of(entity), pageable, 1);
 
-        when(repository.findAll(pageable))
+        when(productCardsRepository.findAll(pageable))
                 .thenReturn(page);
 
         Page<ProductCardResponse> result = service.getCatalog(pageable);
@@ -76,26 +73,26 @@ public class ProductServiceTest {
         assertThat(result.getContent().getFirst().price())
                 .isEqualByComparingTo("99990.00");
 
-        verify(repository).findAll(pageable);
+        verify(productCardsRepository).findAll(pageable);
     }
 
     @Test
-    void shouldReturnEmptyPage(){
+    void shouldReturnEmptyPage() {
         Page<ProductCardEntity> emptyPage = new PageImpl<>(List.of());
 
         Pageable pageable = PageRequest.of(0, 2);
 
-        when(repository.findAll(pageable))
+        when(productCardsRepository.findAll(pageable))
                 .thenReturn(emptyPage);
 
         Page<ProductCardResponse> result = service.getCatalog(pageable);
 
         assertThat(result).isEmpty();
-        verify(repository).findAll(pageable);
+        verify(productCardsRepository).findAll(pageable);
     }
 
     @Test
-    void shouldReturnByCorrectUUID(){
+    void shouldReturnByCorrectUUID() {
         ProductEntity entity = StaticMethods.getTestProductCardEntity(UUID.randomUUID()).getProduct();
         UUID uuid = entity.getPublicId();
 
@@ -108,7 +105,7 @@ public class ProductServiceTest {
     }
 
     @Test
-    void shouldReturnByIncorrectUUID(){
+    void shouldReturnByIncorrectUUID() {
         UUID uuid = UUID.randomUUID();
 
         when(productRepository.findByPublicId(uuid)).thenReturn(Optional.empty());
@@ -121,7 +118,7 @@ public class ProductServiceTest {
     }
 
     @Test
-    void shouldCreateProduct(){
+    void shouldCreateProduct() {
         CreateProductRequest request = new CreateProductRequest(
                 "iphone-16-pro",
                 "iphone 16 pro",
@@ -134,7 +131,7 @@ public class ProductServiceTest {
 
         when(productRepository.save(any(ProductEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(ProductCardEntity.class)))
+        when(productCardsRepository.save(any(ProductCardEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(productDetailsImageRepository.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -148,12 +145,12 @@ public class ProductServiceTest {
         assertThat(result.name()).isEqualTo("iphone 16 pro");
         assertThat(result.price())
                 .isEqualByComparingTo("99990.00");
-        verify(repository).save(any(ProductCardEntity.class));
+        verify(productCardsRepository).save(any(ProductCardEntity.class));
     }
 
 
     @Test
-    void shouldRejectProductWithoutDetailsImages(){
+    void shouldRejectProductWithoutDetailsImages() {
         CreateProductRequest request = new CreateProductRequest(
                 "iphone-16-pro",
                 "iphone 16 pro",
@@ -167,7 +164,7 @@ public class ProductServiceTest {
         assertThat(exception.getMessage())
                 .isEqualTo("At least one details image is required");
 
-        verify(repository, never()).save(any(ProductCardEntity.class));
+        verify(productCardsRepository, never()).save(any(ProductCardEntity.class));
     }
 
     @Test
@@ -181,7 +178,7 @@ public class ProductServiceTest {
 
         when(productRepository.save(any(ProductEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(ProductCardEntity.class)))
+        when(productCardsRepository.save(any(ProductCardEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(productDetailsImageRepository.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -193,7 +190,7 @@ public class ProductServiceTest {
         ArgumentCaptor<ProductCardEntity> captor =
                 ArgumentCaptor.forClass(ProductCardEntity.class);
 
-        verify(repository).save(captor.capture());
+        verify(productCardsRepository).save(captor.capture());
 
         ProductCardEntity savedEntity = captor.getValue();
 
@@ -337,7 +334,7 @@ public class ProductServiceTest {
         ProductCardEntity card = StaticMethods.getTestProductCardEntity(productId);
         MultipartFile previewImage = image("previewImage");
 
-        when(repository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
+        when(productCardsRepository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
         when(mediaStorageService.saveImage(previewImage)).thenReturn("/media/new-preview.webp");
 
         ProductCardResponse response = service.updatePreview(productId, previewImage);
@@ -355,12 +352,12 @@ public class ProductServiceTest {
         card.setProduct(product);
         card.setImgUrl("/media/preview.webp");
 
-        when(repository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
+        when(productCardsRepository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
         when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
 
         service.deleteProduct(productId);
 
-        verify(repository).delete(card);
+        verify(productCardsRepository).delete(card);
         verify(productDetailsImageRepository).delete(product.getDetailsImages().get(0));
         verify(productDetailsImageRepository).delete(product.getDetailsImages().get(1));
         verify(productRepository).delete(product);

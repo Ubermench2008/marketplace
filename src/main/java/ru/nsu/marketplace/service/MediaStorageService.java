@@ -3,6 +3,7 @@ package ru.nsu.marketplace.service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class MediaStorageService {
     @Value("${data.storage.location}")
     private String mediaPath;
@@ -29,6 +31,8 @@ public class MediaStorageService {
             Files.createDirectories(directory);
             Files.copy(image.getInputStream(), path, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException exception) {
+            log.error("Could not save image: path={}", path, exception);
+
             throw new IllegalStateException("Could not save image", exception);
         }
 
@@ -46,6 +50,8 @@ public class MediaStorageService {
         try {
             Files.deleteIfExists(path);
         } catch (IOException exception) {
+            log.error("Could not delete image: path={}", path, exception);
+
             throw new IllegalStateException("Could not delete image", exception);
         }
     }

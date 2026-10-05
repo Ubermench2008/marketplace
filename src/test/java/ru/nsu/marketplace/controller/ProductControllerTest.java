@@ -2,20 +2,21 @@ package ru.nsu.marketplace.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.http.MediaType;
-import org.springframework.http.HttpMethod;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
-import org.springframework.mock.web.MockMultipartFile;
 import ru.nsu.marketplace.dto.CreateProductRequest;
+import ru.nsu.marketplace.dto.ImagesDetailsResponse;
 import ru.nsu.marketplace.dto.ProductCardResponse;
 import ru.nsu.marketplace.dto.ProductDetailsResponse;
-import ru.nsu.marketplace.dto.ImagesDetailsResponse;
 import ru.nsu.marketplace.dto.UpdateImagesPositionsRequest;
 import ru.nsu.marketplace.dto.UpdateProductRequest;
 import ru.nsu.marketplace.exceptions.ProductNotFoundException;
@@ -26,20 +27,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 @WebMvcTest({ProductController.class, CatalogController.class})
 @AutoConfigureMockMvc(addFilters = false)
@@ -51,7 +47,7 @@ public class ProductControllerTest {
     private ProductService service;
 
     @Test
-    public void shouldCreateProduct() throws Exception {
+    void shouldCreateProduct() throws Exception {
         ProductDetailsResponse response = new ProductDetailsResponse(
                 UUID.randomUUID(),
                 "iphone 16 pro",

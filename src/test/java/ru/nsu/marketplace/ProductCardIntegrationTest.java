@@ -6,9 +6,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.mock.web.MockMultipartFile;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -17,45 +17,41 @@ import ru.nsu.marketplace.entity.ProductEntity;
 import ru.nsu.marketplace.repository.ProductCardsRepository;
 import ru.nsu.marketplace.repository.ProductDetailsImageRepository;
 import ru.nsu.marketplace.repository.ProductRepository;
-import ru.nsu.marketplace.service.ProductService;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)
 @Testcontainers
 public class ProductCardIntegrationTest {
     @Autowired
-    MockMvc mockMvc;
+    private MockMvc mockMvc;
 
     @Autowired
-    ProductService service;
+    private ProductRepository repository;
 
     @Autowired
-    ProductRepository repository;
+    private ProductCardsRepository productCardsRepository;
 
     @Autowired
-    ProductCardsRepository productCardsRepository;
-
-    @Autowired
-    ProductDetailsImageRepository productDetailsImageRepository;
+    private ProductDetailsImageRepository productDetailsImageRepository;
 
     @Container
     @ServiceConnection
-    static PostgreSQLContainer postgres =
+    private static PostgreSQLContainer postgres =
             new PostgreSQLContainer("postgres:16");
 
-    ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
     void shouldManageProductImagesAndDeleteProduct() throws Exception {
@@ -139,7 +135,6 @@ public class ProductCardIntegrationTest {
         assertThat(repository.findByPublicId(uuid)).isEmpty();
         assertThat(productCardsRepository.count()).isZero();
         assertThat(productDetailsImageRepository.count()).isZero();
-
     }
 
     private JsonNode getImages(UUID productId) throws Exception {

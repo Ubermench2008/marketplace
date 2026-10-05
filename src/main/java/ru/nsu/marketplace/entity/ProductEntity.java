@@ -33,7 +33,7 @@ public class ProductEntity {
     @Column(nullable = false)
     private String description;
 
-    @OneToMany(mappedBy = "product")
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
     @OrderBy("position ASC")
     private List<ProductDetailsImageEntity> detailsImages = new ArrayList<>();
 }

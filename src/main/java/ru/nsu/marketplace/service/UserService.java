@@ -1,6 +1,7 @@
 package ru.nsu.marketplace.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -10,10 +11,13 @@ import ru.nsu.marketplace.dto.CreateUserRequest;
 import ru.nsu.marketplace.dto.UpdateUserRequest;
 import ru.nsu.marketplace.dto.UserResponse;
 import ru.nsu.marketplace.entity.UserEntity;
+import ru.nsu.marketplace.entity.CartEntity;
+import ru.nsu.marketplace.enums.Role;
 import ru.nsu.marketplace.exceptions.EmailAlreadyExistException;
 import ru.nsu.marketplace.exceptions.NumberAlreadyExistException;
 import ru.nsu.marketplace.exceptions.UserNotFoundException;
 import ru.nsu.marketplace.repository.UserRepository;
+import ru.nsu.marketplace.repository.CartRepository;
 import ru.nsu.marketplace.service.PhoneNumberService;
 
 import java.util.HashSet;
@@ -21,10 +25,12 @@ import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
     private final PhoneNumberService phoneNumberService;
+    private final CartRepository cartRepository;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> getUsers(Pageable pageable) {
@@ -51,7 +57,19 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRoles(new HashSet<>(request.roles()));
 
-        return toDto(repository.save(user));
+        UserEntity savedUser = repository.save(user);
+
+        if (!savedUser.getRoles().contains(Role.ADMIN)) {
+            CartEntity cart = new CartEntity();
+            cart.setUser(savedUser);
+
+            cartRepository.save(cart);
+        }
+
+        log.info("User was created: userId={}, roles={}",
+                savedUser.getId(), savedUser.getRoles());
+
+        return toDto(savedUser);
     }
 
     @Transactional
@@ -83,12 +101,20 @@ public class UserService {
             user.getRoles().addAll(request.roles());
         }
 
+        log.info("User was updated: userId={}", userId);
+
         return toDto(user);
     }
 
     @Transactional
     public void deleteUser(Long userId) {
-        repository.delete(findUser(userId));
+        UserEntity user = findUser(userId);
+
+        cartRepository.findByUser_Id(userId).ifPresent(cartRepository::delete);
+
+        repository.delete(user);
+
+        log.info("User was deleted: userId={}", userId);
     }
 
     private UserEntity findUser(Long userId) {

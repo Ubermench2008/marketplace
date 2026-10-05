@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public class StaticMethods {
-    public static ProductCardEntity getTestProductCardEntity(UUID uuid){
+    public static ProductCardEntity getTestProductCardEntity(UUID uuid) {
         ProductCardEntity entity = new ProductCardEntity();
         entity.setImgUrl("/media/products/iphone.webp");
 
@@ -22,7 +22,13 @@ public class StaticMethods {
         return entity;
     }
 
-    public static ProductCardEntity getTestProductCardEntity(UUID publicId, String name, String slug, BigDecimal price, String imageUrl){
+    public static ProductCardEntity getTestProductCardEntity(
+            UUID publicId,
+            String name,
+            String slug,
+            BigDecimal price,
+            String imageUrl
+    ) {
         ProductCardEntity entity = new ProductCardEntity();
         entity.setImgUrl(imageUrl);
 

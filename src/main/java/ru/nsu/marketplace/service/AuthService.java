@@ -1,5 +1,6 @@
 package ru.nsu.marketplace.service;
 
+import lombok.extern.slf4j.Slf4j;
 import ru.nsu.marketplace.exceptions.EmailAlreadyExistException;
 import ru.nsu.marketplace.exceptions.InvalidCredentialsException;
 import ru.nsu.marketplace.exceptions.InvalidPhoneNumberException;
@@ -7,15 +8,19 @@ import ru.nsu.marketplace.exceptions.NumberAlreadyExistException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.marketplace.dto.LoginRequest;
 import ru.nsu.marketplace.dto.RegisterRequest;
 import ru.nsu.marketplace.entity.UserEntity;
+import ru.nsu.marketplace.entity.CartEntity;
 import ru.nsu.marketplace.enums.Role;
 import ru.nsu.marketplace.repository.UserRepository;
+import ru.nsu.marketplace.repository.CartRepository;
 
 import java.util.Optional;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -23,7 +28,9 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final PhoneNumberService phoneNumberService;
     private final JwtService jwtService;
+    private final CartRepository cartRepository;
 
+    @Transactional
     public void register(RegisterRequest request) {
         String phoneNumber = phoneNumberService.normalize(request.telephone());
         String email = request.email();
@@ -45,7 +52,14 @@ public class AuthService {
         newUser.setPasswordHash(passwordHash);
         newUser.setRoles(Set.of(Role.BUYER));
 
-        repository.save(newUser);
+        UserEntity saved = repository.save(newUser);
+
+        CartEntity cart = new CartEntity();
+        cart.setUser(saved);
+
+        cartRepository.save(cart);
+
+        log.info("User registered: id={}", saved.getId());
     }
 
     public String login(LoginRequest request) {
@@ -73,9 +87,12 @@ public class AuthService {
         );
 
         if (!encoder.matches(password, foundUser.getPasswordHash())) {
+            log.warn("Login failed: incorrect password for userId={}", foundUser.getId());
+
             throw new InvalidCredentialsException("Неверный логин или пароль");
         }
 
+        log.info("User successfully authenticated: user={}", foundUser.getId());
         return jwtService.createAccessToken(foundUser);
 
     }

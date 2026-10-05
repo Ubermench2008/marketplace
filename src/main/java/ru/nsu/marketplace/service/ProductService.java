@@ -1,5 +1,6 @@
 package ru.nsu.marketplace.service;
 
+import lombok.extern.slf4j.Slf4j;
 import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,14 +16,9 @@ import ru.nsu.marketplace.repository.ProductCardsRepository;
 import ru.nsu.marketplace.repository.ProductDetailsImageRepository;
 import ru.nsu.marketplace.repository.ProductRepository;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductService {
@@ -82,6 +78,7 @@ public class ProductService {
             productDetailsImageRepository.save(imageEntity);
             savedProduct.getDetailsImages().add(imageEntity);
         }
+        log.info("Product was created: productId={}", savedProduct.getPublicId());
 
         return toDetailsResponse(savedProduct);
     }
@@ -122,6 +119,14 @@ public class ProductService {
             response.add(toImagesDetailsResponse(entity));
         }
 
+        List<UUID> addedImages = response.stream()
+                .map(ImagesDetailsResponse::uuid)
+                .toList();
+
+
+        log.info("Product details images added: productId={}, imageIds={}",
+                productId, addedImages);
+
         return response;
     }
 
@@ -146,6 +151,8 @@ public class ProductService {
         if (request.price() != null) {
             product.setPrice(request.price());
         }
+
+        log.info("Product was updated: productId={}", productId);
 
         return toDetailsResponse(product);
     }
@@ -180,6 +187,11 @@ public class ProductService {
             throw new IllegalArgumentException("Image IDs do not belong to this product");
         }
 
+        List<UUID> previousOrder = images.stream()
+                .sorted(Comparator.comparingInt(ProductDetailsImageEntity::getPosition))
+                .map(ProductDetailsImageEntity::getPublicId)
+                .toList();
+
         List<ImagesDetailsResponse> response = new ArrayList<>();
         for (int position = 0; position < imageIds.size(); position++) {
             ProductDetailsImageEntity image = imagesById.get(imageIds.get(position));
@@ -187,6 +199,15 @@ public class ProductService {
 
             response.add(toImagesDetailsResponse(image));
         }
+
+
+        log.info("Product details images positions updated: \n" +
+                        "productId={} \n" +
+                        "previousOrder={} \n" +
+                        "currentOrder={}",
+                productId,
+                previousOrder,
+                imageIds);
 
         return response;
     }
@@ -212,6 +233,12 @@ public class ProductService {
         productDetailsImageRepository.delete(image);
         mediaStorageService.deleteImage(image.getImageUrl());
 
+        log.info("Product details image was deleted: \n" +
+                        "productId={} \n" +
+                        "imageId={}",
+                productId,
+                imageId);
+
         return response;
     }
 
@@ -226,6 +253,8 @@ public class ProductService {
 
         card.setImgUrl(newImgeUrl);
         mediaStorageService.deleteImage(oldImgUrl);
+
+        log.info("Product preview was updated: productId={}", productId);
 
         return toCardResponse(card);
     }
@@ -249,6 +278,8 @@ public class ProductService {
         deleteAllProductDetailsImages(product);
 
         productRepository.delete(product);
+
+        log.info("Product was deleted: productId={}", productId);
     }
 
     private void deleteAllProductDetailsImages(ProductEntity product){
@@ -268,7 +299,7 @@ public class ProductService {
         }
     }
 
-    private ImagesDetailsResponse toImagesDetailsResponse(ProductDetailsImageEntity image) {
+    public ImagesDetailsResponse toImagesDetailsResponse(ProductDetailsImageEntity image) {
         return new ImagesDetailsResponse(
                 image.getPublicId(),
                 image.getImageUrl(),
@@ -276,7 +307,7 @@ public class ProductService {
         );
     }
 
-    private ProductCardResponse toCardResponse(ProductCardEntity entity) {
+    public ProductCardResponse toCardResponse(ProductCardEntity entity) {
         return new ProductCardResponse(
                 entity.getProduct().getPublicId(),
                 entity.getProduct().getSlug(),
@@ -286,7 +317,7 @@ public class ProductService {
         );
     }
 
-    private ProductDetailsResponse toDetailsResponse(ProductEntity entity) {
+    public ProductDetailsResponse toDetailsResponse(ProductEntity entity) {
         return new ProductDetailsResponse(
                 entity.getPublicId(),
                 entity.getName(),

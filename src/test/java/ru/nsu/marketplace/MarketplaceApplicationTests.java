@@ -9,14 +9,14 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest
 @Testcontainers
-class MarketplaceApplicationTests {
+public class MarketplaceApplicationTests {
 
-	@Container
-	@ServiceConnection
-	static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16");
+    @Container
+    @ServiceConnection
+    private static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16");
 
-	@Test
-	void contextLoads() {
-	}
+    @Test
+    void contextLoads() {
+    }
 
 }
