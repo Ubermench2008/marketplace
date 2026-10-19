@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.nsu.marketplace.dto.*;
@@ -24,11 +26,13 @@ public class ProductController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('SELLER')")
     public ProductDetailsResponse createProduct(
             @RequestPart("product") @Valid CreateProductRequest product,
             @RequestPart("previewImage") MultipartFile previewImage,
-            @RequestPart("detailsImages") List<MultipartFile> detailsImages) {
-        return productService.createProduct(product, previewImage, detailsImages);
+            @RequestPart("detailsImages") List<MultipartFile> detailsImages,
+            @AuthenticationPrincipal Long userId) {
+        return productService.createProduct(product, previewImage, detailsImages, userId);
     }
 
     @GetMapping("/{id}/details-images")
@@ -37,44 +41,57 @@ public class ProductController {
     }
 
     @PostMapping(value = "/{id}/details-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('SELLER')")
     public List<ImagesDetailsResponse> addImages(
             @PathVariable("id") UUID productId,
-            @RequestPart("images") List<MultipartFile> images
+            @RequestPart("images") List<MultipartFile> images,
+            @AuthenticationPrincipal Long userId
     ) {
-        return productService.addImages(productId, images);
+        return productService.addImages(productId, images, userId);
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('SELLER')")
     public ProductDetailsResponse updateProduct(
-            @PathVariable UUID id,
-            @RequestBody @Valid UpdateProductRequest request
+            @PathVariable("id") UUID productId,
+            @RequestBody @Valid UpdateProductRequest request,
+            @AuthenticationPrincipal Long userId
     ) {
-        return productService.updateProduct(id, request);
+        return productService.updateProduct(productId, userId, request);
     }
 
     @PatchMapping("/{id}/details-images/positions")
+    @PreAuthorize("hasRole('SELLER')")
     public List<ImagesDetailsResponse> updateImagesPositions(
             @PathVariable("id") UUID productId,
-            @RequestBody @Valid UpdateImagesPositionsRequest request
+            @RequestBody @Valid UpdateImagesPositionsRequest request,
+            @AuthenticationPrincipal Long userId
     ) {
-        return productService.updateImagesPositions(productId, request);
+        return productService.updateImagesPositions(productId, request, userId);
     }
 
     @DeleteMapping("/{id}/details-images/{imageId}")
+    @PreAuthorize("hasRole('SELLER')")
     public ImagesDetailsResponse deleteProductDetailsImage(@PathVariable("id") UUID productId,
-                                                   @PathVariable UUID imageId) {
-        return productService.deleteProductDetailsImage(imageId, productId);
+                                                   @PathVariable UUID imageId,
+                                                   @AuthenticationPrincipal Long userId) {
+        return productService.deleteProductDetailsImage(imageId, productId, userId);
     }
 
     @PutMapping(value = "/{id}/preview-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('SELLER')")
     public ProductCardResponse updatePreview(@PathVariable("id") UUID productId,
-                                             @RequestPart("previewImage") MultipartFile preview) {
-        return productService.updatePreview(productId, preview);
+                                             @RequestPart("previewImage") MultipartFile preview,
+                                             @AuthenticationPrincipal Long userId) {
+        return productService.updatePreview(productId, preview, userId);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteProduct(@PathVariable("id") UUID productId) {
-        productService.deleteProduct(productId);
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<Void> deleteProduct(@PathVariable("id") UUID productId,
+                                            @AuthenticationPrincipal Long userId) {
+        productService.deleteProduct(productId, userId);
         return ResponseEntity.noContent().build();
     }
+
 }

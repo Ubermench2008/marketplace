@@ -3,6 +3,8 @@ package ru.nsu.marketplace.controller;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.MediaType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -15,6 +17,7 @@ import ru.nsu.marketplace.config.SecurityConfig;
 import ru.nsu.marketplace.dto.CartResponse;
 import ru.nsu.marketplace.enums.Role;
 import ru.nsu.marketplace.exceptions.CartNotFoundException;
+import ru.nsu.marketplace.exceptions.CartItemNotFoundException;
 import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import ru.nsu.marketplace.security.JwtAuthenticationFilter;
 import ru.nsu.marketplace.service.CartService;
@@ -30,6 +33,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -238,6 +242,103 @@ public class CartControllerTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(service);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"BUYER", "SELLER"})
+    void shouldDeleteAuthenticatedCustomerCartItem(Role role) throws Exception {
+        mockMvc.perform(delete("/api/cart/items/{itemId}", 15L)
+                        .with(authenticated(10L, role)))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(service).deleteCartItem(10L, 15L);
+    }
+
+    @Test
+    void shouldRejectAdminCartItemDeletion() throws Exception {
+        mockMvc.perform(delete("/api/cart/items/{itemId}", 15L)
+                        .with(authenticated(1L, Role.ADMIN, Role.BUYER)))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void shouldRejectUnauthenticatedCartItemDeletion() throws Exception {
+        mockMvc.perform(delete("/api/cart/items/{itemId}", 15L))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenCartItemIsMissing() throws Exception {
+        doThrow(new CartItemNotFoundException("Cart item not found: itemId=15"))
+                .when(service).deleteCartItem(10L, 15L);
+
+        mockMvc.perform(delete("/api/cart/items/{itemId}", 15L)
+                        .with(authenticated(10L, Role.BUYER)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"BUYER", "SELLER"})
+    void shouldUpdateCustomerCartItemQuantity(Role role) throws Exception {
+        mockMvc.perform(patch("/api/cart/items/{itemId}", 15L)
+                        .with(authenticated(10L, role))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":5}"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(""));
+
+        verify(service).updateQuantity(10L, 15L, 5);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"quantity\":null}", "{\"quantity\":0}", "{\"quantity\":-1}"})
+    void shouldRejectInvalidCartItemQuantity(String body) throws Exception {
+        mockMvc.perform(patch("/api/cart/items/{itemId}", 15L)
+                        .with(authenticated(10L, Role.BUYER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void shouldRejectAdminCartItemQuantityUpdate() throws Exception {
+        mockMvc.perform(patch("/api/cart/items/{itemId}", 15L)
+                        .with(authenticated(1L, Role.ADMIN, Role.BUYER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":5}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void shouldRejectUnauthenticatedCartItemQuantityUpdate() throws Exception {
+        mockMvc.perform(patch("/api/cart/items/{itemId}", 15L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":5}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenUpdatingMissingCartItem() throws Exception {
+        doThrow(new CartItemNotFoundException("Cart item not found: itemId=15"))
+                .when(service).updateQuantity(10L, 15L, 5);
+
+        mockMvc.perform(patch("/api/cart/items/{itemId}", 15L)
+                        .with(authenticated(10L, Role.BUYER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":5}"))
+                .andExpect(status().isNotFound());
     }
 
     private RequestPostProcessor authenticated(Long userId, Role... roles) {

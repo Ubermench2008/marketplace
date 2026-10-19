@@ -2,6 +2,10 @@ package ru.nsu.marketplace;
 
 import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
+import ru.nsu.marketplace.entity.UserEntity;
+import ru.nsu.marketplace.enums.Role;
+
+import java.util.Set;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -11,12 +15,14 @@ public class StaticMethods {
         ProductCardEntity entity = new ProductCardEntity();
         entity.setImgUrl("/media/products/iphone.webp");
 
-        ProductEntity product = new ProductEntity();
-        product.setPublicId(uuid);
-        product.setSlug("iphone-16-pro");
-        product.setName("iphone 16 pro");
-        product.setPrice(new BigDecimal("99990.00"));
-        product.setDescription("A sufficiently long product description for tests.");
+        ProductEntity product = ProductEntity.builder()
+                .publicId(uuid)
+                .slug("iphone-16-pro")
+                .name("iphone 16 pro")
+                .price(new BigDecimal("99990.00"))
+                .description("A sufficiently long product description for tests.")
+                .seller(UserEntity.builder().id(10L).roles(Set.of(Role.SELLER)).build())
+                .build();
         entity.setProduct(product);
 
         return entity;
@@ -32,12 +38,14 @@ public class StaticMethods {
         ProductCardEntity entity = new ProductCardEntity();
         entity.setImgUrl(imageUrl);
 
-        ProductEntity product = new ProductEntity();
-        product.setPublicId(publicId);
-        product.setSlug(slug);
-        product.setName(name);
-        product.setPrice(price);
-        product.setDescription("A sufficiently long product description for tests.");
+        ProductEntity product = ProductEntity.builder()
+                .publicId(publicId)
+                .slug(slug)
+                .name(name)
+                .price(price)
+                .description("A sufficiently long product description for tests.")
+                .seller(UserEntity.builder().id(10L).roles(Set.of(Role.SELLER)).build())
+                .build();
         entity.setProduct(product);
 
         return entity;

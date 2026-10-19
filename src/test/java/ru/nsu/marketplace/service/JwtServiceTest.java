@@ -37,9 +37,10 @@ public class JwtServiceTest {
 
     @Test
     void shouldParseCreatedTokenToOriginalUserIdAndRoles() {
-        UserEntity userEntity = new UserEntity();
-        userEntity.setId(10L);
-        userEntity.setRoles(Set.of(Role.BUYER, Role.SELLER));
+        UserEntity userEntity = UserEntity.builder()
+                .id(10L)
+                .roles(Set.of(Role.BUYER, Role.SELLER))
+                .build();
 
         String token = jwtService.createAccessToken(userEntity);
 
@@ -51,9 +52,10 @@ public class JwtServiceTest {
 
     @Test
     void shouldThrowJwtExceptionWhenTokenRolesAreTampered() {
-        UserEntity userEntity = new UserEntity();
-        userEntity.setId(10L);
-        userEntity.setRoles(Set.of(Role.BUYER));
+        UserEntity userEntity = UserEntity.builder()
+                .id(10L)
+                .roles(Set.of(Role.BUYER))
+                .build();
 
         String token = jwtService.createAccessToken(userEntity);
 
@@ -75,9 +77,10 @@ public class JwtServiceTest {
 
     @Test
     void shouldThrowExpiredJwtExceptionWhenTokenIsExpired() {
-        UserEntity userEntity = new UserEntity();
-        userEntity.setId(10L);
-        userEntity.setRoles(Set.of(Role.BUYER));
+        UserEntity userEntity = UserEntity.builder()
+                .id(10L)
+                .roles(Set.of(Role.BUYER))
+                .build();
 
         JwtService expiredTokenService = new JwtService(
                 new JwtProperties("unused", Duration.ofSeconds(-1)),

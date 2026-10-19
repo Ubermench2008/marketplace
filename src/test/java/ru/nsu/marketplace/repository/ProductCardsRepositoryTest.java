@@ -14,6 +14,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import ru.nsu.marketplace.StaticMethods;
 import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
+import ru.nsu.marketplace.entity.UserEntity;
+import ru.nsu.marketplace.enums.Role;
+
+import java.util.Set;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -31,6 +35,9 @@ public class ProductCardsRepositoryTest {
     @Autowired
     private ProductRepository productRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @Container
     @ServiceConnection
     static PostgreSQLContainer postgres =
@@ -43,12 +50,14 @@ public class ProductCardsRepositoryTest {
         ProductCardEntity entity = new ProductCardEntity();
         entity.setImgUrl("/media/products/iphone.webp");
 
-        ProductEntity product = new ProductEntity();
-        product.setPublicId(uuid);
-        product.setSlug("iphone-16-pro");
-        product.setName("iPhone 16 Pro");
-        product.setPrice(new BigDecimal("99990.00"));
-        product.setDescription("A sufficiently long product description for tests.");
+        ProductEntity product = ProductEntity.builder()
+                .publicId(uuid)
+                .slug("iphone-16-pro")
+                .name("iPhone 16 Pro")
+                .price(new BigDecimal("99990.00"))
+                .description("A sufficiently long product description for tests.")
+                .seller(createSeller())
+                .build();
         entity.setProduct(productRepository.save(product));
 
         ProductCardEntity saved = repository.save(entity);
@@ -65,10 +74,12 @@ public class ProductCardsRepositoryTest {
     @Test
     void shouldReturnCorrectProductCardPage() {
         List<ProductCardEntity> testEntities = new ArrayList<>();
+        UserEntity seller = createSeller();
 
         for (int i = 0; i < 10; i++) {
             ProductCardEntity entity = StaticMethods.getTestProductCardEntity(UUID.randomUUID());
             entity.getProduct().setSlug("iphone-16-pro-" + i);
+            entity.getProduct().setSeller(seller);
             testEntities.add(entity);
         }
 
@@ -92,5 +103,13 @@ public class ProductCardsRepositoryTest {
         assertThat(result.hasPrevious()).isTrue();
 
         assertThat(result.getContent().getFirst().getProduct().getName()).isEqualTo("iphone 16 pro");
+    }
+    private UserEntity createSeller() {
+        return userRepository.save(UserEntity.builder()
+                .name("test_seller")
+                .telephoneNumber("+79991234570")
+                .passwordHash("test-password-hash")
+                .roles(Set.of(Role.SELLER))
+                .build());
     }
 }

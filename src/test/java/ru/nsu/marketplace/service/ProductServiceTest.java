@@ -1,6 +1,9 @@
 package ru.nsu.marketplace.service;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.security.access.AccessDeniedException;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -22,14 +25,18 @@ import ru.nsu.marketplace.dto.UpdateProductRequest;
 import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductDetailsImageEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
+import ru.nsu.marketplace.entity.UserEntity;
+import ru.nsu.marketplace.enums.Role;
 import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import ru.nsu.marketplace.repository.ProductCardsRepository;
 import ru.nsu.marketplace.repository.ProductDetailsImageRepository;
 import ru.nsu.marketplace.repository.ProductRepository;
+import ru.nsu.marketplace.repository.UserRepository;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +54,9 @@ public class ProductServiceTest {
 
     @Mock
     private ProductDetailsImageRepository productDetailsImageRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     @Mock
     private MediaStorageService mediaStorageService;
@@ -129,6 +139,8 @@ public class ProductServiceTest {
         MultipartFile previewImage = image("previewImage");
         MultipartFile detailsImage = image("detailsImages");
 
+        when(userRepository.findById(10L)).thenReturn(Optional.of(seller()));
+
         when(productRepository.save(any(ProductEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(productCardsRepository.save(any(ProductCardEntity.class)))
@@ -138,7 +150,7 @@ public class ProductServiceTest {
         when(mediaStorageService.saveImage(any()))
                 .thenReturn("/media/preview.webp", "/media/details.webp");
 
-        ProductDetailsResponse result = service.createProduct(request, previewImage, List.of(detailsImage));
+        ProductDetailsResponse result = service.createProduct(request, previewImage, List.of(detailsImage), 10L);
 
         assertThat(result.id()).isNotNull();
         assertThat(result.slug()).isEqualTo("iphone-16-pro");
@@ -159,7 +171,7 @@ public class ProductServiceTest {
         );
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> service.createProduct(request, image("previewImage"), List.of()));
+                () -> service.createProduct(request, image("previewImage"), List.of(), 10L));
 
         assertThat(exception.getMessage())
                 .isEqualTo("At least one details image is required");
@@ -176,6 +188,8 @@ public class ProductServiceTest {
                 new BigDecimal("99990.00")
         );
 
+        when(userRepository.findById(10L)).thenReturn(Optional.of(seller()));
+
         when(productRepository.save(any(ProductEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(productCardsRepository.save(any(ProductCardEntity.class)))
@@ -185,7 +199,7 @@ public class ProductServiceTest {
         when(mediaStorageService.saveImage(any()))
                 .thenReturn("/media/preview.webp", "/media/details.webp");
 
-        service.createProduct(request, image("previewImage"), List.of(image("detailsImages")));
+        service.createProduct(request, image("previewImage"), List.of(image("detailsImages")), 10L);
 
         ArgumentCaptor<ProductCardEntity> captor =
                 ArgumentCaptor.forClass(ProductCardEntity.class);
@@ -194,6 +208,7 @@ public class ProductServiceTest {
 
         ProductCardEntity savedEntity = captor.getValue();
 
+        assertThat(savedEntity.getProduct().getSeller().getId()).isEqualTo(10L);
         assertThat(savedEntity.getProduct().getPublicId()).isNotNull();
         assertThat(savedEntity.getProduct().getSlug())
                 .isEqualTo(request.slug());
@@ -221,8 +236,7 @@ public class ProductServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         List<ImagesDetailsResponse> response = service.addImages(
-                productId, List.of(firstNewImage, secondNewImage)
-        );
+                productId, List.of(firstNewImage, secondNewImage), 10L);
 
         assertThat(response).extracting(ImagesDetailsResponse::position)
                 .containsExactly(2, 3);
@@ -241,8 +255,7 @@ public class ProductServiceTest {
 
         List<ImagesDetailsResponse> response = service.updateImagesPositions(
                 productId,
-                new UpdateImagesPositionsRequest(List.of(thirdId, firstId, secondId))
-        );
+                new UpdateImagesPositionsRequest(List.of(thirdId, firstId, secondId)), 10L);
 
         assertThat(response).extracting(ImagesDetailsResponse::uuid)
                 .containsExactly(thirdId, firstId, secondId);
@@ -260,8 +273,7 @@ public class ProductServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.updateImagesPositions(
                 productId,
-                new UpdateImagesPositionsRequest(List.of(product.getDetailsImages().getFirst().getPublicId()))
-        ));
+                new UpdateImagesPositionsRequest(List.of(product.getDetailsImages().getFirst().getPublicId())), 10L));
     }
 
     @Test
@@ -274,8 +286,7 @@ public class ProductServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.updateImagesPositions(
                 productId,
-                new UpdateImagesPositionsRequest(List.of(imageId, imageId))
-        ));
+                new UpdateImagesPositionsRequest(List.of(imageId, imageId)), 10L));
     }
 
     @Test
@@ -290,8 +301,7 @@ public class ProductServiceTest {
                 new UpdateImagesPositionsRequest(List.of(
                         product.getDetailsImages().getFirst().getPublicId(),
                         UUID.randomUUID()
-                ))
-        ));
+                )), 10L));
     }
 
     @Test
@@ -303,8 +313,7 @@ public class ProductServiceTest {
         when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
 
         ImagesDetailsResponse response = service.deleteProductDetailsImage(
-                deletedImage.getPublicId(), productId
-        );
+                deletedImage.getPublicId(), productId, 10L);
 
         assertThat(response.uuid()).isEqualTo(deletedImage.getPublicId());
         assertThat(product.getDetailsImages()).hasSize(2);
@@ -322,8 +331,7 @@ public class ProductServiceTest {
         when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
 
         assertThrows(IllegalArgumentException.class, () -> service.deleteProductDetailsImage(
-                UUID.randomUUID(), productId
-        ));
+                UUID.randomUUID(), productId, 10L));
 
         verifyNoInteractions(productDetailsImageRepository, mediaStorageService);
     }
@@ -337,7 +345,7 @@ public class ProductServiceTest {
         when(productCardsRepository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
         when(mediaStorageService.saveImage(previewImage)).thenReturn("/media/new-preview.webp");
 
-        ProductCardResponse response = service.updatePreview(productId, previewImage);
+        ProductCardResponse response = service.updatePreview(productId, previewImage, 10L);
 
         assertThat(card.getImgUrl()).isEqualTo("/media/new-preview.webp");
         assertThat(response.imgUrl()).isEqualTo("/media/new-preview.webp");
@@ -355,7 +363,7 @@ public class ProductServiceTest {
         when(productCardsRepository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
         when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
 
-        service.deleteProduct(productId);
+        service.deleteProduct(productId, 10L);
 
         verify(productCardsRepository).delete(card);
         verify(productDetailsImageRepository).delete(product.getDetailsImages().get(0));
@@ -373,7 +381,7 @@ public class ProductServiceTest {
 
         when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
 
-        service.updateProduct(productId, new UpdateProductRequest(
+        service.updateProduct(productId, 10L, new UpdateProductRequest(
                 null, "New name", null, new BigDecimal("109990.00")
         ));
 
@@ -383,15 +391,96 @@ public class ProductServiceTest {
         assertThat(product.getDescription()).isEqualTo("A sufficiently long product description for tests.");
     }
 
+    @Test
+    void shouldRejectProductCreationByBuyer() {
+        CreateProductRequest request = new CreateProductRequest(
+                "iphone-16-pro", "iphone 16 pro",
+                "A sufficiently long product description for tests.", new BigDecimal("99990.00")
+        );
+        UserEntity buyer = UserEntity.builder().id(10L).roles(Set.of(Role.BUYER)).build();
+        when(userRepository.findById(10L)).thenReturn(Optional.of(buyer));
+
+        assertThrows(AccessDeniedException.class,
+                () -> service.createProduct(request, image("previewImage"), List.of(image("detailsImages")), 10L));
+
+        verifyNoInteractions(productRepository, productCardsRepository,
+                productDetailsImageRepository, mediaStorageService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"fields", "addImages", "positions", "deleteImage", "preview", "deleteProduct"})
+    void shouldRejectModificationByAnotherSeller(String operation) {
+        assertModificationDenied(operation, 20L, Set.of(Role.SELLER));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"fields", "addImages", "positions", "deleteImage", "preview", "deleteProduct"})
+    void shouldRejectModificationWhenOwnerIsNoLongerSeller(String operation) {
+        assertModificationDenied(operation, 10L, Set.of(Role.BUYER));
+    }
+
+    private void assertModificationDenied(String operation, Long userId, Set<Role> ownerRoles) {
+        UUID productId = UUID.randomUUID();
+        ProductEntity product = productWithImages(productId, 2);
+        product.getSeller().setRoles(ownerRoles);
+        ProductCardEntity card = new ProductCardEntity();
+        card.setProduct(product);
+        card.setImgUrl("/media/preview.webp");
+
+        if (operation.equals("preview") || operation.equals("deleteProduct")) {
+            when(productCardsRepository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
+        }
+        if (!operation.equals("preview")) {
+            when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        }
+
+        assertThrows(AccessDeniedException.class, () -> {
+            switch (operation) {
+                case "fields" -> service.updateProduct(productId, userId,
+                        new UpdateProductRequest(null, "New name", null, null));
+                case "addImages" -> service.addImages(productId, List.of(image("images")), userId);
+                case "positions" -> service.updateImagesPositions(productId,
+                        new UpdateImagesPositionsRequest(List.of(
+                                product.getDetailsImages().get(1).getPublicId(),
+                                product.getDetailsImages().get(0).getPublicId()
+                        )), userId);
+                case "deleteImage" -> service.deleteProductDetailsImage(
+                        product.getDetailsImages().getFirst().getPublicId(), productId, userId);
+                case "preview" -> service.updatePreview(productId, image("previewImage"), userId);
+                case "deleteProduct" -> service.deleteProduct(productId, userId);
+                default -> throw new IllegalArgumentException("Unknown operation: " + operation);
+            }
+        });
+
+        assertThat(product.getName()).isEqualTo("iphone 16 pro");
+        assertThat(product.getDetailsImages()).hasSize(2);
+        assertThat(product.getDetailsImages()).extracting(ProductDetailsImageEntity::getPosition)
+                .containsExactly(0, 1);
+        assertThat(card.getImgUrl()).isEqualTo("/media/preview.webp");
+        verifyNoInteractions(productDetailsImageRepository, mediaStorageService);
+        verify(productRepository, never()).save(any());
+        verify(productRepository, never()).delete(any());
+        verify(productCardsRepository, never()).save(any());
+        verify(productCardsRepository, never()).delete(any());
+    }
+
+    private UserEntity seller() {
+        return UserEntity.builder()
+                .id(10L)
+                .roles(Set.of(Role.SELLER))
+                .build();
+    }
+
     private ProductEntity productWithImages(UUID productId, int imageCount) {
         ProductEntity product = StaticMethods.getTestProductCardEntity(productId).getProduct();
 
         for (int position = 0; position < imageCount; position++) {
-            ProductDetailsImageEntity image = new ProductDetailsImageEntity();
-            image.setPublicId(UUID.randomUUID());
-            image.setProduct(product);
-            image.setImageUrl("/media/image-" + position + ".webp");
-            image.setPosition(position);
+            ProductDetailsImageEntity image = ProductDetailsImageEntity.builder()
+                    .publicId(UUID.randomUUID())
+                    .product(product)
+                    .imageUrl("/media/image-" + position + ".webp")
+                    .position(position)
+                    .build();
             product.getDetailsImages().add(image);
         }
 

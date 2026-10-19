@@ -11,6 +11,7 @@ import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
 import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import ru.nsu.marketplace.exceptions.CartNotFoundException;
+import ru.nsu.marketplace.exceptions.CartItemNotFoundException;
 import ru.nsu.marketplace.repository.CartRepository;
 import ru.nsu.marketplace.repository.ProductCardsRepository;
 import ru.nsu.marketplace.repository.ProductRepository;
@@ -43,7 +44,7 @@ public class CartService {
                 () -> new ProductNotFoundException("Product is missing: product=" + productId)
         );
 
-        CartEntity cart = cartRepository.findByUser_Id(userId).orElseThrow(
+        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
                 () -> new CartNotFoundException("User cart is missing: userId=" + userId)
         );
 
@@ -66,11 +67,43 @@ public class CartService {
 
     @Transactional
     public void clearCart(Long userId) {
-        CartEntity cart = cartRepository.findByUser_Id(userId).orElseThrow(
+        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
                 () -> new CartNotFoundException("User cart is missing: userId=" + userId)
         );
 
         cart.getCartItemEntities().clear();
+    }
+
+    @Transactional
+    public void deleteCartItem(Long userId, Long itemId) {
+        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
+                () -> new CartNotFoundException("User cart is missing: userId=" + userId)
+        );
+
+        CartItemEntity cartItem = cart.getCartItemEntities().stream()
+                .filter(item -> item.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new CartItemNotFoundException("Cart item not found: itemId=" + itemId));
+
+        cart.getCartItemEntities().remove(cartItem);
+    }
+
+    @Transactional
+    public void updateQuantity(Long userId, Long itemId, Integer quantity) {
+        if (quantity == null || quantity < 1) {
+            throw new IllegalArgumentException("Quantity must be at least 1");
+        }
+
+        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
+                () -> new CartNotFoundException("User cart is missing: userId=" + userId)
+        );
+
+        CartItemEntity cartItem = cart.getCartItemEntities().stream()
+                .filter(item -> item.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new CartItemNotFoundException("Cart item not found: itemId=" + itemId));
+
+        cartItem.setQuantity(quantity);
     }
 
     public CartResponse toDto(CartEntity cartEntity) {

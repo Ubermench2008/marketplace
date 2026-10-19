@@ -1,7 +1,11 @@
 package ru.nsu.marketplace.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.UUID;
@@ -10,6 +14,9 @@ import java.util.UUID;
 @Table(name = "product_details_images")
 @Getter
 @Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class ProductDetailsImageEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

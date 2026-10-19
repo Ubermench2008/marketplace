@@ -1,7 +1,11 @@
 package ru.nsu.marketplace.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
@@ -13,6 +17,9 @@ import java.util.UUID;
 @Table(name = "products")
 @Getter
 @Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class ProductEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,7 +40,12 @@ public class ProductEntity {
     @Column(nullable = false)
     private String description;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "seller_id", nullable = false)
+    private UserEntity seller;
+
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
     @OrderBy("position ASC")
+    @Builder.Default
     private List<ProductDetailsImageEntity> detailsImages = new ArrayList<>();
 }

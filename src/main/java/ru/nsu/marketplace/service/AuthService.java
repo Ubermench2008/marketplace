@@ -45,12 +45,13 @@ public class AuthService {
 
         String passwordHash = encoder.encode(request.password());
 
-        UserEntity newUser = new UserEntity();
-        newUser.setName(request.name());
-        newUser.setEmail(email);
-        newUser.setTelephoneNumber(phoneNumber);
-        newUser.setPasswordHash(passwordHash);
-        newUser.setRoles(Set.of(Role.BUYER));
+        UserEntity newUser = UserEntity.builder()
+                .name(request.name())
+                .email(email)
+                .telephoneNumber(phoneNumber)
+                .passwordHash(passwordHash)
+                .roles(Set.of(Role.BUYER))
+                .build();
 
         UserEntity saved = repository.save(newUser);
 

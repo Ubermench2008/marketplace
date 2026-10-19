@@ -1,6 +1,17 @@
 package ru.nsu.marketplace;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+import ru.nsu.marketplace.entity.UserEntity;
+import ru.nsu.marketplace.enums.Role;
+import ru.nsu.marketplace.repository.UserRepository;
+
+import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -23,6 +34,8 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -30,8 +43,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
+@SpringBootTest(properties = {
+        "app.jwt.secretKey=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+        "app.initial-admin.name=test_admin",
+        "app.initial-admin.telephone=+79991234567",
+        "app.initial-admin.password=AdminPassword123"
+})
+@AutoConfigureMockMvc
 @Testcontainers
 public class ProductCardIntegrationTest {
     @Autowired
@@ -45,6 +63,30 @@ public class ProductCardIntegrationTest {
 
     @Autowired
     private ProductDetailsImageRepository productDetailsImageRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private WebApplicationContext context;
+
+    @BeforeEach
+    void setUp() {
+        UserEntity seller = userRepository.save(UserEntity.builder()
+                .name("test_seller")
+                .telephoneNumber("+79991234570")
+                .passwordHash("test-password-hash")
+                .roles(Set.of(Role.SELLER))
+                .build());
+
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(springSecurity())
+                .defaultRequest(get("/").with(authentication(
+                        new UsernamePasswordAuthenticationToken(seller.getId(), null,
+                                List.of(new SimpleGrantedAuthority("ROLE_SELLER")))
+                )))
+                .build();
+    }
 
     @Container
     @ServiceConnection

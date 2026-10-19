@@ -50,12 +50,13 @@ public class UserService {
         ensureTelephoneAvailable(telephone, null);
         ensureEmailAvailable(email, null);
 
-        UserEntity user = new UserEntity();
-        user.setName(request.name());
-        user.setTelephoneNumber(telephone);
-        user.setEmail(email);
-        user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRoles(new HashSet<>(request.roles()));
+        UserEntity user = UserEntity.builder()
+                .name(request.name())
+                .telephoneNumber(telephone)
+                .email(email)
+                .passwordHash(passwordEncoder.encode(request.password()))
+                .roles(new HashSet<>(request.roles()))
+                .build();
 
         UserEntity savedUser = repository.save(user);
 

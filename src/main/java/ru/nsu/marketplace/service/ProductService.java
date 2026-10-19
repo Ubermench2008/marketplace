@@ -1,6 +1,9 @@
 package ru.nsu.marketplace.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
+import ru.nsu.marketplace.entity.*;
+import ru.nsu.marketplace.enums.Role;
 import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,12 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import ru.nsu.marketplace.dto.*;
-import ru.nsu.marketplace.entity.ProductCardEntity;
-import ru.nsu.marketplace.entity.ProductDetailsImageEntity;
-import ru.nsu.marketplace.entity.ProductEntity;
-import ru.nsu.marketplace.repository.ProductCardsRepository;
-import ru.nsu.marketplace.repository.ProductDetailsImageRepository;
-import ru.nsu.marketplace.repository.ProductRepository;
+import ru.nsu.marketplace.exceptions.UserNotFoundException;
+import ru.nsu.marketplace.repository.*;
 
 import java.util.*;
 
@@ -22,14 +21,21 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class ProductService {
-    public final ProductCardsRepository productCardsRepository;
-    public final ProductRepository productRepository;
-    public final ProductDetailsImageRepository productDetailsImageRepository;
-    public final MediaStorageService mediaStorageService;
+    private final ProductCardsRepository productCardsRepository;
+    private final ProductRepository productRepository;
+    private final ProductDetailsImageRepository productDetailsImageRepository;
+    private final UserRepository userRepository;
+    private final MediaStorageService mediaStorageService;
 
     @Transactional(readOnly = true)
     public Page<ProductCardResponse> getCatalog(Pageable pageable){
         return productCardsRepository.findAll(pageable)
+                .map(this::toCardResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductCardResponse> getCatalogBySeller(Pageable pageable, Long userId){
+        return productCardsRepository.findAllByProduct_Seller_Id(userId, pageable)
                 .map(this::toCardResponse);
     }
 
@@ -45,17 +51,26 @@ public class ProductService {
     @Transactional
     public ProductDetailsResponse createProduct(CreateProductRequest request,
                                                 MultipartFile previewImage,
-                                                List<MultipartFile> detailsImages) {
+                                                List<MultipartFile> detailsImages,
+                                                Long userId) {
         if (detailsImages == null || detailsImages.isEmpty()) {
             throw new IllegalArgumentException("At least one details image is required");
         }
 
-        ProductEntity product = new ProductEntity();
-        product.setPublicId(UUID.randomUUID());
-        product.setSlug(request.slug());
-        product.setName(request.name());
-        product.setPrice(request.price());
-        product.setDescription(request.description());
+        UserEntity user = userRepository.findById(userId).orElseThrow(
+                () -> new UserNotFoundException("Seller not found: userId=" + userId)
+        );
+
+        ProductEntity product = ProductEntity.builder()
+                .publicId(UUID.randomUUID())
+                .slug(request.slug())
+                .name(request.name())
+                .price(request.price())
+                .description(request.description())
+                .seller(user)
+                .build();
+
+        ensureSellerOwnsProduct(product, userId);
 
         ProductEntity savedProduct = productRepository.save(product);
 
@@ -69,11 +84,12 @@ public class ProductService {
         int positionIdx = 0;
 
         for (MultipartFile detailsImage : detailsImages) {
-            ProductDetailsImageEntity imageEntity = new ProductDetailsImageEntity();
-            imageEntity.setPublicId(UUID.randomUUID());
-            imageEntity.setProduct(savedProduct);
-            imageEntity.setImageUrl(mediaStorageService.saveImage(detailsImage));
-            imageEntity.setPosition(positionIdx++);
+            ProductDetailsImageEntity imageEntity = ProductDetailsImageEntity.builder()
+                    .publicId(UUID.randomUUID())
+                    .product(savedProduct)
+                    .imageUrl(mediaStorageService.saveImage(detailsImage))
+                    .position(positionIdx++)
+                    .build();
 
             productDetailsImageRepository.save(imageEntity);
             savedProduct.getDetailsImages().add(imageEntity);
@@ -95,24 +111,26 @@ public class ProductService {
     }
 
     @Transactional
-    public List<ImagesDetailsResponse> addImages(UUID productId, List<MultipartFile> images) {
+    public List<ImagesDetailsResponse> addImages(UUID productId, List<MultipartFile> images, Long userId) {
         ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
                 () -> new ProductNotFoundException("Product not found")
         );
 
+        ensureSellerOwnsProduct(product, userId);
+
         List<ImagesDetailsResponse> response = new ArrayList<>();
 
         for (MultipartFile rawImage : images) {
-            ProductDetailsImageEntity entity = new ProductDetailsImageEntity();
-
             UUID uuid = UUID.randomUUID();
             String imageUrl = mediaStorageService.saveImage(rawImage);
             int position = product.getDetailsImages().size();
 
-            entity.setPublicId(uuid);
-            entity.setProduct(product);
-            entity.setImageUrl(imageUrl);
-            entity.setPosition(position);
+            ProductDetailsImageEntity entity = ProductDetailsImageEntity.builder()
+                    .publicId(uuid)
+                    .product(product)
+                    .imageUrl(imageUrl)
+                    .position(position)
+                    .build();
 
             productDetailsImageRepository.save(entity);
             product.getDetailsImages().add(entity);
@@ -131,10 +149,12 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDetailsResponse updateProduct(UUID productId, UpdateProductRequest request) {
+    public ProductDetailsResponse updateProduct(UUID productId, Long userId, UpdateProductRequest request) {
         ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
                 () -> new ProductNotFoundException("Product not found")
         );
+
+        ensureSellerOwnsProduct(product, userId);
 
         if (request.slug() != null) {
             product.setSlug(request.slug());
@@ -160,11 +180,14 @@ public class ProductService {
     @Transactional
     public List<ImagesDetailsResponse> updateImagesPositions(
             UUID productId,
-            UpdateImagesPositionsRequest request
+            UpdateImagesPositionsRequest request,
+            Long userId
     ) {
         ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
                 () -> new ProductNotFoundException("Product not found")
         );
+
+        ensureSellerOwnsProduct(product, userId);
 
         List<ProductDetailsImageEntity> images = product.getDetailsImages();
         List<UUID> imageIds = request.imageIds();
@@ -213,10 +236,12 @@ public class ProductService {
     }
 
     @Transactional
-    public ImagesDetailsResponse deleteProductDetailsImage(UUID imageId, UUID productId) {
+    public ImagesDetailsResponse deleteProductDetailsImage(UUID imageId, UUID productId, Long userId) {
         ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
                 () -> new ProductNotFoundException("Product not found")
         );
+
+        ensureSellerOwnsProduct(product, userId);
 
         ProductDetailsImageEntity image = product.getDetailsImages().stream()
                 .filter(item -> item.getPublicId().equals(imageId))
@@ -243,10 +268,12 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductCardResponse updatePreview(UUID productId, MultipartFile preview) {
+    public ProductCardResponse updatePreview(UUID productId, MultipartFile preview, Long userId) {
         ProductCardEntity card = productCardsRepository
                 .findByProduct_PublicId(productId)
                 .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+
+        ensureSellerOwnsProduct(card.getProduct(), userId);
 
         String oldImgUrl = card.getImgUrl();
         String newImgeUrl = mediaStorageService.saveImage(preview);
@@ -260,10 +287,16 @@ public class ProductService {
     }
 
     @Transactional
-    public void deleteProduct(UUID productId) {
+    public void deleteProduct(UUID productId, Long userId) {
         ProductCardEntity card = productCardsRepository.findByProduct_PublicId(productId).orElseThrow(
                 () -> new ProductNotFoundException("Product not found")
         );
+
+        ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
+                () -> new ProductNotFoundException("Product not found")
+        );
+
+        ensureSellerOwnsProduct(product, userId);
 
         String previewUrl = card.getImgUrl();
 
@@ -271,15 +304,21 @@ public class ProductService {
 
         productCardsRepository.delete(card);
 
-        ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
-
         deleteAllProductDetailsImages(product);
 
         productRepository.delete(product);
 
         log.info("Product was deleted: productId={}", productId);
+    }
+
+    private void ensureSellerOwnsProduct(ProductEntity product, Long userId) {
+        UserEntity seller = product.getSeller();
+
+        if (userId == null || seller == null || !Objects.equals(seller.getId(), userId)
+                || !seller.getRoles().contains(Role.SELLER)) {
+            throw new AccessDeniedException("Only seller-owner can modify product: userId=" + userId
+                    + " productId=" + product.getPublicId());
+        }
     }
 
     private void deleteAllProductDetailsImages(ProductEntity product){

@@ -1,6 +1,9 @@
 package ru.nsu.marketplace.service;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -12,6 +15,7 @@ import ru.nsu.marketplace.entity.CartItemEntity;
 import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
 import ru.nsu.marketplace.exceptions.CartNotFoundException;
+import ru.nsu.marketplace.exceptions.CartItemNotFoundException;
 import ru.nsu.marketplace.exceptions.ProductNotFoundException;
 import ru.nsu.marketplace.repository.CartRepository;
 import ru.nsu.marketplace.repository.ProductCardsRepository;
@@ -121,7 +125,7 @@ public class CartServiceTest {
         ProductEntity product = item(2L, "19.90", 1).getProduct();
         UUID productId = product.getPublicId();
         when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
-        when(cartRepository.findByUser_Id(10L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
 
         service.addProductInCart(10L, productId);
 
@@ -146,7 +150,7 @@ public class CartServiceTest {
         UUID productId = existingItem.getProduct().getPublicId();
         when(productRepository.findByPublicId(productId))
                 .thenReturn(Optional.of(existingItem.getProduct()));
-        when(cartRepository.findByUser_Id(10L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
 
         service.addProductInCart(10L, productId);
 
@@ -171,7 +175,7 @@ public class CartServiceTest {
         ProductEntity product = item(1L, "19.90", 1).getProduct();
         UUID productId = product.getPublicId();
         when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
-        when(cartRepository.findByUser_Id(10L)).thenReturn(Optional.empty());
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.empty());
 
         assertThrows(CartNotFoundException.class,
                 () -> service.addProductInCart(10L, productId));
@@ -184,7 +188,7 @@ public class CartServiceTest {
         CartEntity cart = new CartEntity();
         cart.getCartItemEntities().add(item(1L, "19.90", 3));
         cart.getCartItemEntities().add(item(2L, "5.25", 2));
-        when(cartRepository.findByUser_Id(10L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
 
         service.clearCart(10L);
 
@@ -196,7 +200,7 @@ public class CartServiceTest {
     @Test
     void shouldAllowClearingAlreadyEmptyCart() {
         CartEntity cart = new CartEntity();
-        when(cartRepository.findByUser_Id(10L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
 
         service.clearCart(10L);
         service.clearCart(10L);
@@ -208,18 +212,103 @@ public class CartServiceTest {
 
     @Test
     void shouldThrowWhenClearingMissingCart() {
-        when(cartRepository.findByUser_Id(10L)).thenReturn(Optional.empty());
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.empty());
 
         assertThrows(CartNotFoundException.class, () -> service.clearCart(10L));
 
         verifyNoInteractions(productRepository, productCardsRepository, productService);
     }
 
+    @Test
+    void shouldDeleteOnlyRequestedCartItem() {
+        CartEntity cart = new CartEntity();
+        CartItemEntity deletedItem = item(1L, "19.90", 3);
+        CartItemEntity remainingItem = item(2L, "5.25", 2);
+        cart.getCartItemEntities().add(deletedItem);
+        cart.getCartItemEntities().add(remainingItem);
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
+
+        service.deleteCartItem(10L, 1L);
+
+        assertThat(cart.getCartItemEntities()).containsExactly(remainingItem);
+        assertThat(remainingItem.getQuantity()).isEqualTo(2);
+        verify(cartRepository, never()).delete(cart);
+        verifyNoInteractions(productRepository, productCardsRepository, productService);
+    }
+
+    @Test
+    void shouldNotDeleteItemOutsideCurrentUserCart() {
+        CartEntity cart = new CartEntity();
+        CartItemEntity existingItem = item(1L, "19.90", 1);
+        cart.getCartItemEntities().add(existingItem);
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
+
+        assertThrows(CartItemNotFoundException.class, () -> service.deleteCartItem(10L, 2L));
+
+        assertThat(cart.getCartItemEntities()).containsExactly(existingItem);
+        verifyNoInteractions(productRepository, productCardsRepository, productService);
+    }
+
+    @Test
+    void shouldThrowWhenDeletingItemFromMissingCart() {
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.empty());
+
+        assertThrows(CartNotFoundException.class, () -> service.deleteCartItem(10L, 1L));
+
+        verifyNoInteractions(productRepository, productCardsRepository, productService);
+    }
+
+    @Test
+    void shouldSetQuantityOnlyForRequestedCartItem() {
+        CartEntity cart = new CartEntity();
+        CartItemEntity updatedItem = item(1L, "19.90", 3);
+        CartItemEntity otherItem = item(2L, "5.25", 2);
+        cart.getCartItemEntities().add(updatedItem);
+        cart.getCartItemEntities().add(otherItem);
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
+
+        service.updateQuantity(10L, 1L, 5);
+
+        assertThat(updatedItem.getQuantity()).isEqualTo(5);
+        assertThat(otherItem.getQuantity()).isEqualTo(2);
+        assertThat(cart.getCartItemEntities()).containsExactly(updatedItem, otherItem);
+        verifyNoInteractions(productRepository, productCardsRepository, productService);
+    }
+
+    @Test
+    void shouldNotUpdateItemOutsideCurrentUserCart() {
+        CartEntity cart = new CartEntity();
+        CartItemEntity existingItem = item(1L, "19.90", 3);
+        cart.getCartItemEntities().add(existingItem);
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
+
+        assertThrows(CartItemNotFoundException.class, () -> service.updateQuantity(10L, 2L, 5));
+
+        assertThat(existingItem.getQuantity()).isEqualTo(3);
+    }
+
+    @Test
+    void shouldThrowWhenUpdatingQuantityInMissingCart() {
+        when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.empty());
+
+        assertThrows(CartNotFoundException.class, () -> service.updateQuantity(10L, 1L, 5));
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(ints = {0, -1})
+    void shouldRejectInvalidQuantity(Integer quantity) {
+        assertThrows(IllegalArgumentException.class, () -> service.updateQuantity(10L, 1L, quantity));
+
+        verifyNoInteractions(cartRepository, productRepository, productCardsRepository, productService);
+    }
+
     private CartItemEntity item(Long id, String price, int quantity) {
-        ProductEntity product = new ProductEntity();
-        product.setId(id + 10L);
-        product.setPublicId(UUID.randomUUID());
-        product.setPrice(new BigDecimal(price));
+        ProductEntity product = ProductEntity.builder()
+                .id(id + 10L)
+                .publicId(UUID.randomUUID())
+                .price(new BigDecimal(price))
+                .build();
 
         CartItemEntity item = new CartItemEntity();
         item.setId(id);

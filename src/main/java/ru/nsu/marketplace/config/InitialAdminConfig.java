@@ -46,11 +46,12 @@ public class InitialAdminConfig {
                 return;
             }
 
-            UserEntity admin = new UserEntity();
-            admin.setName(properties.name());
-            admin.setTelephoneNumber(telephone);
-            admin.setPasswordHash(passwordEncoder.encode(properties.password()));
-            admin.setRoles(Set.of(Role.ADMIN));
+            UserEntity admin = UserEntity.builder()
+                    .name(properties.name())
+                    .telephoneNumber(telephone)
+                    .passwordHash(passwordEncoder.encode(properties.password()))
+                    .roles(Set.of(Role.ADMIN))
+                    .build();
 
             userRepository.save(admin);
 

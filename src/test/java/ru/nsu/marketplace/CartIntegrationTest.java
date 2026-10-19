@@ -16,6 +16,10 @@ import ru.nsu.marketplace.dto.CartResponse;
 import ru.nsu.marketplace.dto.LoginResponse;
 import ru.nsu.marketplace.entity.ProductCardEntity;
 import ru.nsu.marketplace.entity.ProductEntity;
+import ru.nsu.marketplace.entity.UserEntity;
+import ru.nsu.marketplace.enums.Role;
+
+import java.util.Set;
 import ru.nsu.marketplace.repository.CartRepository;
 import ru.nsu.marketplace.repository.ProductCardsRepository;
 import ru.nsu.marketplace.repository.ProductRepository;
@@ -211,12 +215,21 @@ public class CartIntegrationTest {
     }
 
     private ProductEntity product(String slug, String price) {
-        ProductEntity product = new ProductEntity();
-        product.setPublicId(UUID.randomUUID());
-        product.setSlug(slug);
-        product.setName(slug);
-        product.setDescription("Product description for cart integration test.");
-        product.setPrice(new BigDecimal(price));
+        UserEntity seller = userRepository.findByTelephoneNumber("+79991234570")
+                .orElseGet(() -> userRepository.save(UserEntity.builder()
+                        .name("cart_seller")
+                        .telephoneNumber("+79991234570")
+                        .passwordHash("test-password-hash")
+                        .roles(Set.of(Role.SELLER))
+                        .build()));
+        ProductEntity product = ProductEntity.builder()
+                .publicId(UUID.randomUUID())
+                .slug(slug)
+                .name(slug)
+                .description("Product description for cart integration test.")
+                .seller(seller)
+                .price(new BigDecimal(price))
+                .build();
         ProductEntity savedProduct = productRepository.save(product);
 
         ProductCardEntity card = new ProductCardEntity();

@@ -135,11 +135,12 @@ public class AuthServiceTest {
                 "correctPassword"
         );
 
-        UserEntity user = new UserEntity();
-        user.setId(10L);
-        user.setEmail("correctLogin@gmail.com");
-        user.setPasswordHash("correctHashedPassword");
-        user.setRoles(Set.of(Role.BUYER));
+        UserEntity user = UserEntity.builder()
+                .id(10L)
+                .email("correctLogin@gmail.com")
+                .passwordHash("correctHashedPassword")
+                .roles(Set.of(Role.BUYER))
+                .build();
 
         when(repository.findByEmail("correctLogin@gmail.com"))
                 .thenReturn(Optional.of(user));
@@ -182,11 +183,12 @@ public class AuthServiceTest {
                 "incorrectPassword"
         );
 
-        UserEntity user = new UserEntity();
-        user.setId(10L);
-        user.setEmail("correctLogin@gmail.com");
-        user.setPasswordHash("correctHashedPassword");
-        user.setRoles(Set.of(Role.BUYER));
+        UserEntity user = UserEntity.builder()
+                .id(10L)
+                .email("correctLogin@gmail.com")
+                .passwordHash("correctHashedPassword")
+                .roles(Set.of(Role.BUYER))
+                .build();
 
         when(repository.findByEmail("correctLogin@gmail.com"))
                 .thenReturn(Optional.of(user));

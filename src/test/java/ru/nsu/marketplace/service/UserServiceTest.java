@@ -295,13 +295,14 @@ public class UserServiceTest {
             String email,
             Set<Role> roles
     ) {
-        UserEntity user = new UserEntity();
-        user.setId(id);
-        user.setName(name);
-        user.setTelephoneNumber(telephone);
-        user.setEmail(email);
-        user.setPasswordHash("password-hash");
-        user.setRoles(new HashSet<>(roles));
+        UserEntity user = UserEntity.builder()
+                .id(id)
+                .name(name)
+                .telephoneNumber(telephone)
+                .email(email)
+                .passwordHash("password-hash")
+                .roles(new HashSet<>(roles))
+                .build();
         return user;
     }
 }

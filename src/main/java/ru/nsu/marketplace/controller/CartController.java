@@ -1,11 +1,13 @@
 package ru.nsu.marketplace.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import ru.nsu.marketplace.dto.CartResponse;
+import ru.nsu.marketplace.dto.UpdateCartItemQuantityRequest;
 import ru.nsu.marketplace.service.CartService;
 
 import java.util.UUID;
@@ -41,5 +43,22 @@ public class CartController {
     public ResponseEntity<Void> clearCart(@AuthenticationPrincipal Long userId) {
         service.clearCart(userId);
         return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/items/{itemId}")
+    @PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteCartItem(@AuthenticationPrincipal Long userId,
+                                              @PathVariable("itemId") Long itemId) {
+        service.deleteCartItem(userId, itemId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/items/{itemId}")
+    @PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
+    public ResponseEntity<Void> updateQuantity(@PathVariable("itemId") Long itemId,
+                                               @AuthenticationPrincipal Long userId,
+                                               @RequestBody @Valid UpdateCartItemQuantityRequest request) {
+        service.updateQuantity(userId, itemId, request.quantity());
+        return ResponseEntity.ok().build();
     }
 }

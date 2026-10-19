@@ -85,8 +85,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
-    @ExceptionHandler(CartNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleCartNotFound(CartNotFoundException exception) {
+    @ExceptionHandler({CartNotFoundException.class, CartItemNotFoundException.class, OrderNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleCartNotFound(RuntimeException exception) {
         ApiErrorResponse response = new ApiErrorResponse(
                 HttpStatus.NOT_FOUND.value(),
                 exception.getMessage(),
@@ -95,6 +95,18 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    @ExceptionHandler(OrderStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleOrderState(OrderStateException exception) {
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                exception.getMessage(),
+                List.of(),
+                Instant.now()
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)

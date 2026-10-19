@@ -1,8 +1,16 @@
 package ru.nsu.marketplace.controller;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+import ru.nsu.marketplace.config.SecurityConfig;
+import ru.nsu.marketplace.security.JwtAuthenticationFilter;
+import ru.nsu.marketplace.service.JwtService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +35,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -38,13 +48,30 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({ProductController.class, CatalogController.class})
-@AutoConfigureMockMvc(addFilters = false)
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class})
 public class ProductControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private ProductService service;
+
+    @MockitoBean
+    private JwtService jwtService;
+
+    @Autowired
+    private WebApplicationContext context;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(springSecurity())
+                .defaultRequest(get("/").with(authentication(
+                        new UsernamePasswordAuthenticationToken(10L, null,
+                                List.of(new SimpleGrantedAuthority("ROLE_SELLER")))
+                )))
+                .build();
+    }
 
     @Test
     void shouldCreateProduct() throws Exception {
@@ -57,7 +84,7 @@ public class ProductControllerTest {
                 List.of()
         );
 
-        when(service.createProduct(any(CreateProductRequest.class), any(), anyList()))
+        when(service.createProduct(any(CreateProductRequest.class), any(), anyList(), eq(10L)))
                 .thenReturn(response);
 
         mockMvc.perform(createProductRequest("""
@@ -190,7 +217,7 @@ public class ProductControllerTest {
         UUID productId = UUID.randomUUID();
         ProductDetailsResponse response = productDetailsResponse(productId);
 
-        when(service.updateProduct(eq(productId), any(UpdateProductRequest.class)))
+        when(service.updateProduct(eq(productId), eq(10L), any(UpdateProductRequest.class)))
                 .thenReturn(response);
 
         mockMvc.perform(patch("/api/products/{id}", productId)
@@ -201,7 +228,7 @@ public class ProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(productId.toString()));
 
-        verify(service).updateProduct(eq(productId), any(UpdateProductRequest.class));
+        verify(service).updateProduct(eq(productId), eq(10L), any(UpdateProductRequest.class));
     }
 
     @Test
@@ -211,7 +238,7 @@ public class ProductControllerTest {
                 UUID.randomUUID(), "/media/new.webp", 2
         );
 
-        when(service.addImages(eq(productId), anyList())).thenReturn(List.of(response));
+        when(service.addImages(eq(productId), anyList(), eq(10L))).thenReturn(List.of(response));
 
         mockMvc.perform(multipart("/api/products/{id}/details-images", productId)
                         .file(image("images")))
@@ -219,7 +246,7 @@ public class ProductControllerTest {
                 .andExpect(jsonPath("$[0].uuid").value(response.uuid().toString()))
                 .andExpect(jsonPath("$[0].position").value(2));
 
-        verify(service).addImages(eq(productId), anyList());
+        verify(service).addImages(eq(productId), anyList(), eq(10L));
     }
 
     @Test
@@ -228,7 +255,7 @@ public class ProductControllerTest {
         UUID imageId = UUID.randomUUID();
         ImagesDetailsResponse response = new ImagesDetailsResponse(imageId, "/media/image.webp", 0);
 
-        when(service.updateImagesPositions(eq(productId), any(UpdateImagesPositionsRequest.class)))
+        when(service.updateImagesPositions(eq(productId), any(UpdateImagesPositionsRequest.class), eq(10L)))
                 .thenReturn(List.of(response));
 
         mockMvc.perform(patch("/api/products/{id}/details-images/positions", productId)
@@ -239,7 +266,7 @@ public class ProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].uuid").value(imageId.toString()));
 
-        verify(service).updateImagesPositions(eq(productId), any(UpdateImagesPositionsRequest.class));
+        verify(service).updateImagesPositions(eq(productId), any(UpdateImagesPositionsRequest.class), eq(10L));
     }
 
     @Test
@@ -248,13 +275,13 @@ public class ProductControllerTest {
         UUID imageId = UUID.randomUUID();
         ImagesDetailsResponse response = new ImagesDetailsResponse(imageId, "/media/image.webp", 1);
 
-        when(service.deleteProductDetailsImage(imageId, productId)).thenReturn(response);
+        when(service.deleteProductDetailsImage(imageId, productId, 10L)).thenReturn(response);
 
         mockMvc.perform(delete("/api/products/{id}/details-images/{imageId}", productId, imageId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.uuid").value(imageId.toString()));
 
-        verify(service).deleteProductDetailsImage(imageId, productId);
+        verify(service).deleteProductDetailsImage(imageId, productId, 10L);
     }
 
     @Test
@@ -265,14 +292,14 @@ public class ProductControllerTest {
                 new BigDecimal("99990.00"), "/media/new-preview.webp"
         );
 
-        when(service.updatePreview(eq(productId), any())).thenReturn(response);
+        when(service.updatePreview(eq(productId), any(), eq(10L))).thenReturn(response);
 
         mockMvc.perform(multipart(HttpMethod.PUT, "/api/products/{id}/preview-image", productId)
                         .file(image("previewImage")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.imgUrl").value("/media/new-preview.webp"));
 
-        verify(service).updatePreview(eq(productId), any());
+        verify(service).updatePreview(eq(productId), any(), eq(10L));
     }
 
     @Test
@@ -283,7 +310,7 @@ public class ProductControllerTest {
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
 
-        verify(service).deleteProduct(productId);
+        verify(service).deleteProduct(productId, 10L);
     }
 
     private ProductDetailsResponse productDetailsResponse(UUID productId) {

@@ -13,4 +13,8 @@ import java.util.UUID;
 @Repository
 public interface ProductCardsRepository extends JpaRepository<ProductCardEntity, Long> {
     Optional<ProductCardEntity> findByProduct_PublicId(UUID productPublicId);
+    Page<ProductCardEntity> findAllByProduct_Seller_Id(
+            Long sellerId,
+            Pageable pageable
+    );
 }
