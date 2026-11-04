@@ -126,7 +126,7 @@ public class CartIntegrationTest {
         String adminToken = login("+79991234567", "AdminPassword123");
         String adminCartJson = mockMvc.perform(get("/api/admin/users/{userId}/cart", buyerId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
-                .andExpect(status().isNoContent())
+                .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         CartResponse adminCart = mapper.readValue(adminCartJson, CartResponse.class);
         assertThat(adminCart.items()).containsExactlyInAnyOrderElementsOf(cart.items());

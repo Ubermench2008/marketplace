@@ -8,6 +8,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.multipart.MultipartFile;
+import ru.nsu.marketplace.media.MediaImageDeletionRequested;
 import ru.nsu.marketplace.media.MediaStorageService;
 import ru.nsu.marketplace.product.dto.CreateProductRequest;
 import ru.nsu.marketplace.product.dto.ProductCardResponse;
@@ -26,6 +28,7 @@ import ru.nsu.marketplace.product.exception.ProductNotFoundException;
 import ru.nsu.marketplace.product.model.ProductCardEntity;
 import ru.nsu.marketplace.product.model.ProductDetailsImageEntity;
 import ru.nsu.marketplace.product.model.ProductEntity;
+import ru.nsu.marketplace.product.moderation.ProductModerationRepository;
 import ru.nsu.marketplace.user.Role;
 import ru.nsu.marketplace.user.UserEntity;
 import ru.nsu.marketplace.user.UserRepository;
@@ -61,6 +64,12 @@ public class ProductServiceTest {
 
     @InjectMocks
     private ProductService service;
+
+    @Mock
+    private ProductModerationRepository productModerationRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Test
     void shouldReturnCards() {
@@ -221,7 +230,7 @@ public class ProductServiceTest {
         MultipartFile firstNewImage = image("images");
         MultipartFile secondNewImage = image("images");
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
         when(mediaStorageService.saveImage(firstNewImage)).thenReturn("/media/third.webp");
         when(mediaStorageService.saveImage(secondNewImage)).thenReturn("/media/fourth.webp");
         when(productDetailsImageRepository.save(any(ProductDetailsImageEntity.class))).thenAnswer(
@@ -246,7 +255,7 @@ public class ProductServiceTest {
         UUID secondId = product.getDetailsImages().get(1).getPublicId();
         UUID thirdId = product.getDetailsImages().get(2).getPublicId();
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         List<ProductDetailsImageResponse> response = service.updateProductImageOrder(
             productId,
@@ -267,7 +276,7 @@ public class ProductServiceTest {
         UUID productId = UUID.randomUUID();
         ProductEntity product = productWithImages(productId, 2);
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         assertThrows(IllegalArgumentException.class, () ->
             service.updateProductImageOrder(
@@ -286,7 +295,7 @@ public class ProductServiceTest {
         ProductEntity product = productWithImages(productId, 2);
         UUID imageId = product.getDetailsImages().getFirst().getPublicId();
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         assertThrows(IllegalArgumentException.class, () ->
             service.updateProductImageOrder(
@@ -302,7 +311,7 @@ public class ProductServiceTest {
         UUID productId = UUID.randomUUID();
         ProductEntity product = productWithImages(productId, 2);
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         assertThrows(IllegalArgumentException.class, () ->
             service.updateProductImageOrder(
@@ -321,7 +330,7 @@ public class ProductServiceTest {
         ProductEntity product = productWithImages(productId, 3);
         ProductDetailsImageEntity deletedImage = product.getDetailsImages().get(1);
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         ProductDetailsImageResponse response = service.deleteProductDetailsImage(
             deletedImage.getPublicId(),
@@ -335,7 +344,8 @@ public class ProductServiceTest {
             .extracting(ProductDetailsImageEntity::getPosition)
             .containsExactly(0, 1);
         verify(productDetailsImageRepository).delete(deletedImage);
-        verify(mediaStorageService).deleteImage(deletedImage.getImageUrl());
+        verify(eventPublisher).publishEvent(new MediaImageDeletionRequested(deletedImage.getImageUrl()));
+        verify(mediaStorageService, never()).deleteImage(any());
     }
 
     @Test
@@ -343,7 +353,7 @@ public class ProductServiceTest {
         UUID productId = UUID.randomUUID();
         ProductEntity product = productWithImages(productId, 1);
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         assertThrows(IllegalArgumentException.class, () ->
             service.deleteProductDetailsImage(UUID.randomUUID(), productId, 10L)
@@ -358,6 +368,7 @@ public class ProductServiceTest {
         ProductCardEntity card = ProductTestFixtures.createProductCard(productId);
         MultipartFile previewImage = image("previewImage");
 
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(card.getProduct()));
         when(productCardRepository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
         when(mediaStorageService.saveImage(previewImage)).thenReturn("/media/new-preview.webp");
 
@@ -365,7 +376,8 @@ public class ProductServiceTest {
 
         assertThat(card.getPreviewImageUrl()).isEqualTo("/media/new-preview.webp");
         assertThat(response.imgUrl()).isEqualTo("/media/new-preview.webp");
-        verify(mediaStorageService).deleteImage("/media/products/iphone.webp");
+        verify(eventPublisher).publishEvent(new MediaImageDeletionRequested("/media/products/iphone.webp"));
+        verify(mediaStorageService, never()).deleteImage(any());
     }
 
     @Test
@@ -393,7 +405,7 @@ public class ProductServiceTest {
         UUID productId = UUID.randomUUID();
         ProductEntity product = ProductTestFixtures.createProductCard(productId).getProduct();
 
-        when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         service.updateProduct(
             productId,
@@ -454,12 +466,7 @@ public class ProductServiceTest {
         card.setProduct(product);
         card.setPreviewImageUrl("/media/preview.webp");
 
-        if (operation.equals("preview") || operation.equals("archive")) {
-            when(productCardRepository.findByProduct_PublicId(productId)).thenReturn(Optional.of(card));
-        }
-        if (!operation.equals("preview")) {
-            when(productRepository.findByPublicId(productId)).thenReturn(Optional.of(product));
-        }
+        when(productRepository.findByPublicIdForUpdate(productId)).thenReturn(Optional.of(product));
 
         assertThrows(AccessDeniedException.class, () -> {
             switch (operation) {

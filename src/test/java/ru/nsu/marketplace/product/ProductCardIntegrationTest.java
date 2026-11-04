@@ -19,6 +19,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import ru.nsu.marketplace.product.dto.ProductDetailsResponse;
 import ru.nsu.marketplace.product.model.ProductEntity;
+import ru.nsu.marketplace.product.model.ProductStatus;
 import ru.nsu.marketplace.user.Role;
 import ru.nsu.marketplace.user.UserEntity;
 import ru.nsu.marketplace.user.UserRepository;
@@ -36,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,7 +45,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.jwt.secretKey=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
         "app.initial-admin.name=test_admin",
         "app.initial-admin.telephone=+79991234567",
-        "app.initial-admin.password=AdminPassword123"
+        "app.initial-admin.password=AdminPassword123",
+        "data.storage.location=build/tmp/product-card-integration-media"
 })
 @AutoConfigureMockMvc
 @Testcontainers
@@ -92,7 +95,7 @@ public class ProductCardIntegrationTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
-    void shouldManageProductImagesAndDeleteProduct() throws Exception {
+    void shouldManageProductImagesAndArchiveProduct() throws Exception {
         MvcResult postResult = mockMvc.perform(
                         multipart("/api/products")
                                 .file(new MockMultipartFile(
@@ -113,7 +116,7 @@ public class ProductCardIntegrationTest {
                                         "detailsImages", "details.webp", "image/webp", "details".getBytes()
                                 ))
                 )
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andReturn();
 
         String jsonData = postResult.getResponse().getContentAsString();
@@ -141,7 +144,7 @@ public class ProductCardIntegrationTest {
                                         "images", "second.webp", "image/webp", "second".getBytes()
                                 ))
                 )
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].position").value(1));
 
         JsonNode images = getProductDetailsImages(uuid);
@@ -160,19 +163,20 @@ public class ProductCardIntegrationTest {
                 .andExpect(jsonPath("$[0].position").value(0));
 
         mockMvc.perform(delete("/api/products/{id}/details-images/{imageId}", uuid, secondImageId))
-                .andExpect(status().isOk());
+                .andExpect(status().isNoContent());
 
         JsonNode remainingImages = getProductDetailsImages(uuid);
         assertThat(remainingImages.size()).isEqualTo(1);
         assertThat(remainingImages.get(0).get("uuid").asText()).isEqualTo(firstImageId.toString());
         assertThat(remainingImages.get(0).get("position").asInt()).isZero();
 
-        mockMvc.perform(delete("/api/products/{id}", uuid))
+        mockMvc.perform(post("/api/products/{id}/archive", uuid))
                 .andExpect(status().isNoContent());
 
-        assertThat(repository.findByPublicId(uuid)).isEmpty();
-        assertThat(productCardRepository.count()).isZero();
-        assertThat(productDetailsImageRepository.count()).isZero();
+        ProductEntity archivedProduct = repository.findByPublicId(uuid).orElseThrow();
+        assertThat(archivedProduct.getStatus()).isEqualTo(ProductStatus.ARCHIVED);
+        assertThat(productCardRepository.findByProduct_PublicId(uuid)).isPresent();
+        assertThat(productDetailsImageRepository.count()).isEqualTo(1);
     }
 
     private JsonNode getProductDetailsImages(UUID productId) throws Exception {
