@@ -1,0 +1,9 @@
+{
+    "name": "ryadom-frontend-tools",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "start": "node serve.mjs",
+        "check": "node check.mjs"
+    }
+}

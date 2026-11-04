@@ -38,3 +38,7 @@ out/
 .vscode/
 
 /logs/
+
+/AGENTS.md
+/.editorconfig
+/.prettierrc.json

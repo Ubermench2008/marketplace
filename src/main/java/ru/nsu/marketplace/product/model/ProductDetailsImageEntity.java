@@ -1,0 +1,42 @@
+package ru.nsu.marketplace.product.model;
+
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "product_details_images")
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+public class ProductDetailsImageEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "product_details_image_id_generator")
+    @SequenceGenerator(
+            name = "product_details_image_id_generator",
+            sequenceName = "product_details_images_seq",
+            allocationSize = 50
+    )
+    private Long id;
+
+    @Column(nullable = false, unique = true, updatable = false)
+    private UUID publicId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "product_id", nullable = false)
+    private ProductEntity product;
+
+    @Column(nullable = false)
+    private String imageUrl;
+
+    @Column(nullable = false)
+    private int position;
+}
