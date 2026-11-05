@@ -65,12 +65,8 @@ public class ProductReviewService {
             Pageable pageable,
             Long userId
     ) {
-        ProductReviewEntity review = reviewRepository.findById(reviewId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Review not found")
-        );
-        if (review.getModerationStatus() != ModerationStatus.APPROVED) {
-            throw new ProductReviewNotFoundException("Review not found");
-        }
+        ProductReviewEntity review = findReview(reviewId);
+        ensureReviewApproved(review);
         Pageable likesOrderedPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<ProductReviewReplyEntity> replies = reviewReplyRepository.findByReviewIdAndStatusOrderByLikes(
                 reviewId,
@@ -89,17 +85,11 @@ public class ProductReviewService {
             Pageable pageable,
             Long userId
     ) {
-        ProductReviewEntity review = reviewRepository.findById(reviewId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Review not found")
-        );
-        if (review.getModerationStatus() != ModerationStatus.APPROVED) {
-            throw new ProductReviewNotFoundException("Review not found");
-        }
+        ProductReviewEntity review = findReview(reviewId);
+        ensureReviewApproved(review);
 
         if (parentId != null) {
-            ProductReviewReplyEntity parent = reviewReplyRepository.findById(parentId).orElseThrow(
-                    () -> new ReviewReplyNotFoundException("Review reply not found")
-            );
+            ProductReviewReplyEntity parent = findReply(parentId);
             if (!Objects.equals(parent.getReview().getId(), reviewId)) {
                 throw new ReviewReplyNotFoundException("Review reply not found");
             }
@@ -169,24 +159,16 @@ public class ProductReviewService {
     public void createProductReviewReply(Long reviewId, CreateProductReviewReplyRequest request, Long userId) {
         ensureReplyTextValid(request.text());
 
-        ProductReviewEntity review = reviewRepository.findByIdForUpdate(reviewId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Review not found")
-        );
+        ProductReviewEntity review = findReviewForUpdate(reviewId);
         ensureReviewNotDeleted(review);
-        if (review.getModerationStatus() != ModerationStatus.APPROVED) {
-            throw new ProductReviewNotFoundException("Review not found");
-        }
+        ensureReviewApproved(review);
 
-        UserEntity author = userRepository.findById(userId).orElseThrow(
-                () -> new UserNotFoundException("User not found")
-        );
+        UserEntity author = findUser(userId);
         ensureUserCanReply(author);
 
         ProductReviewReplyEntity replyTo = null;
         if (request.replyToId() != null) {
-            replyTo = reviewReplyRepository.findById(request.replyToId()).orElseThrow(
-                    () -> new ReviewReplyNotFoundException("Review reply not found")
-            );
+            replyTo = findReply(request.replyToId());
             ensureReplyTargetValid(replyTo, reviewId);
         }
 
@@ -283,9 +265,7 @@ public class ProductReviewService {
         ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
                 () -> new ProductNotFoundException("Product not found")
         );
-        UserEntity user = userRepository.findById(userId).orElseThrow(
-                () -> new UserNotFoundException("User not found")
-        );
+        UserEntity user = findUser(userId);
         ensureReviewDoesNotExist(product.getId(), userId);
 
         ProductReviewEntity review = new ProductReviewEntity();
@@ -318,13 +298,8 @@ public class ProductReviewService {
             Long userId,
             UpdateProductReviewRequest request
     ) {
-        ProductReviewModerationEntity moderation = reviewModerationRepository
-                .findLatestByReviewIdForUpdate(reviewId, PageRequest.of(0, 1)).stream().findFirst().orElseThrow(
-                        () -> new ProductReviewNotFoundException("Review moderation request not found")
-                );
-        ProductReviewEntity review = reviewRepository.findByIdForUpdate(reviewId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Review not found")
-        );
+        ProductReviewModerationEntity moderation = findLatestReviewModerationForUpdate(reviewId);
+        ProductReviewEntity review = findReviewForUpdate(reviewId);
         ensureReviewNotDeleted(review);
         ensureReviewAuthor(review, userId);
         ensureModerationRequestIsPending(moderation);
@@ -351,13 +326,8 @@ public class ProductReviewService {
 
     @Transactional
     public void deleteProductReview(Long reviewId, Long userId) {
-        ProductReviewModerationEntity moderation = reviewModerationRepository
-                .findLatestByReviewIdForUpdate(reviewId, PageRequest.of(0, 1)).stream().findFirst().orElseThrow(
-                        () -> new ProductReviewNotFoundException("Review moderation request not found")
-                );
-        ProductReviewEntity review = reviewRepository.findByIdForUpdate(reviewId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Review not found")
-        );
+        ProductReviewModerationEntity moderation = findLatestReviewModerationForUpdate(reviewId);
+        ProductReviewEntity review = findReviewForUpdate(reviewId);
         ensureReviewAuthor(review, userId);
         if (review.getDeletedAt() != null) {
             return;
@@ -366,6 +336,39 @@ public class ProductReviewService {
         if (moderation.getStatus() == ModerationStatus.PENDING) {
             moderation.setStatus(ModerationStatus.CANCELLED);
             review.setModerationStatus(ModerationStatus.CANCELLED);
+        }
+    }
+
+    private ProductReviewEntity findReview(Long reviewId) {
+        return reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ProductReviewNotFoundException("Review not found"));
+    }
+
+    private ProductReviewEntity findReviewForUpdate(Long reviewId) {
+        return reviewRepository.findByIdForUpdate(reviewId)
+                .orElseThrow(() -> new ProductReviewNotFoundException("Review not found"));
+    }
+
+    private ProductReviewModerationEntity findLatestReviewModerationForUpdate(Long reviewId) {
+        return reviewModerationRepository.findLatestByReviewIdForUpdate(reviewId, PageRequest.of(0, 1))
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ProductReviewNotFoundException("Review moderation request not found"));
+    }
+
+    private ProductReviewReplyEntity findReply(Long replyId) {
+        return reviewReplyRepository.findById(replyId)
+                .orElseThrow(() -> new ReviewReplyNotFoundException("Review reply not found"));
+    }
+
+    private UserEntity findUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    }
+
+    private void ensureReviewApproved(ProductReviewEntity review) {
+        if (review.getModerationStatus() != ModerationStatus.APPROVED) {
+            throw new ProductReviewNotFoundException("Review not found");
         }
     }
 

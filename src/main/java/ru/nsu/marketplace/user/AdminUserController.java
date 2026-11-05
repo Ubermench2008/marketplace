@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -13,41 +12,43 @@ import ru.nsu.marketplace.user.dto.CreateUserRequest;
 import ru.nsu.marketplace.user.dto.UpdateUserRequest;
 import ru.nsu.marketplace.user.dto.UserResponse;
 
+import java.net.URI;
+
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/admin")
+@RequestMapping("/api/admin/users")
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminUserController {
     private final UserService userService;
 
-    @GetMapping("/users")
+    @GetMapping
     public Page<UserResponse> getUsers(
             @PageableDefault(size = 20, sort = "name") Pageable pageable
     ) {
         return userService.getUsers(pageable);
     }
 
-    @GetMapping("/users/{id}")
-    public UserResponse getUser(@PathVariable("id") Long userId) {
+    @GetMapping("/{userId}")
+    public UserResponse getUser(@PathVariable Long userId) {
         return userService.getUser(userId);
     }
 
-    @PostMapping("/users")
+    @PostMapping
     public ResponseEntity<UserResponse> createUser(@RequestBody @Valid CreateUserRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(userService.createUser(request));
+        UserResponse user = userService.createUser(request);
+        return ResponseEntity.created(URI.create("/api/admin/users/" + user.id())).body(user);
     }
 
-    @PatchMapping("/users/{id}")
+    @PatchMapping("/{userId}")
     public UserResponse updateUser(
-            @PathVariable("id") Long userId,
+            @PathVariable Long userId,
             @RequestBody @Valid UpdateUserRequest request
     ) {
         return userService.updateUser(userId, request);
     }
 
-    @DeleteMapping("/users/{id}")
-    public ResponseEntity<Void> deleteUser(@PathVariable("id") Long userId) {
+    @DeleteMapping("/{userId}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long userId) {
         userService.deleteUser(userId);
         return ResponseEntity.noContent().build();
     }

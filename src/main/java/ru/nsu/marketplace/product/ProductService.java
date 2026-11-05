@@ -28,6 +28,8 @@ import ru.nsu.marketplace.product.model.ProductStatus;
 import ru.nsu.marketplace.product.moderation.ProductModerationEntity;
 import ru.nsu.marketplace.product.moderation.ProductModerationRepository;
 import ru.nsu.marketplace.product.moderation.ProductModerationSnapshot;
+import ru.nsu.marketplace.product.stock.ProductStockRepository;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 import ru.nsu.marketplace.user.Role;
 import ru.nsu.marketplace.user.UserEntity;
 import ru.nsu.marketplace.user.UserRepository;
@@ -45,6 +47,7 @@ public class ProductService {
     private final ProductDetailsImageRepository productDetailsImageRepository;
     private final UserRepository userRepository;
     private final MediaStorageService mediaStorageService;
+    private final ProductStockService productStockService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
@@ -61,9 +64,7 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductDetailsResponse getProduct(UUID productId) {
-        ProductEntity product = productRepository.findByPublicId(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicId(productId);
 
         return toDetailsResponse(product);
     }
@@ -96,6 +97,8 @@ public class ProductService {
 
         ProductEntity savedProduct = productRepository.save(product);
 
+        productStockService.createStockItem(savedProduct, request.initialQuantity());
+
         ProductCardEntity card = new ProductCardEntity();
 
         card.setPreviewImageUrl(mediaStorageService.saveImage(previewImage));
@@ -123,8 +126,7 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public List<ProductDetailsImageResponse> getProductDetailsImages(UUID productId) {
-        ProductEntity product = productRepository.findByPublicId(productId)
-                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+        ProductEntity product = findProductByPublicId(productId);
 
         return product.getDetailsImages().stream()
                 .map(this::toDetailsImageResponse)
@@ -138,9 +140,7 @@ public class ProductService {
             List<MultipartFile> images,
             Long userId
     ) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanEditProduct(product, userId);
 
@@ -179,9 +179,7 @@ public class ProductService {
 
     @Transactional
     public ProductDetailsResponse updateProduct(UUID productId, Long userId, UpdateProductRequest request) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanEditProduct(product, userId);
 
@@ -221,9 +219,7 @@ public class ProductService {
             UpdateProductImageOrderRequest request,
             Long userId
     ) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanEditProduct(product, userId);
 
@@ -283,9 +279,7 @@ public class ProductService {
 
     @Transactional
     public ProductDetailsImageResponse deleteProductDetailsImage(UUID imageId, UUID productId, Long userId) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanEditProduct(product, userId);
 
@@ -316,9 +310,7 @@ public class ProductService {
 
     @Transactional
     public ProductCardResponse updateProductPreview(UUID productId, MultipartFile preview, Long userId) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanEditProduct(product, userId);
 
@@ -369,9 +361,7 @@ public class ProductService {
 
     @Transactional
     public void submitProductForModeration(UUID productId, Long sellerId) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanSubmitProductForModeration(product, sellerId);
 
@@ -423,9 +413,7 @@ public class ProductService {
 
     @Transactional
     public void publishProduct(UUID productId, Long sellerId) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanPublishProduct(product, sellerId);
 
@@ -436,28 +424,30 @@ public class ProductService {
 
     @Transactional
     public void withdrawProductFromSale(UUID productId, Long sellerId) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
-        ensureSellerOwnsProduct(product, sellerId);
-
-        if (product.getStatus() != ProductStatus.ACTIVE) {
-            throw new ProductStateException("Only active products can be withdrawn from sale");
-        }
+        ensureSellerCanWithdrawProduct(product, sellerId);
 
         product.setStatus(ProductStatus.OFF);
     }
 
     @Transactional
     public void archiveProduct(UUID productId, Long sellerId) {
-        ProductEntity product = productRepository.findByPublicIdForUpdate(productId).orElseThrow(
-                () -> new ProductNotFoundException("Product not found")
-        );
+        ProductEntity product = findProductByPublicIdForUpdate(productId);
 
         ensureSellerCanArchiveProduct(product, sellerId);
 
         product.setStatus(ProductStatus.ARCHIVED);
+    }
+
+    private ProductEntity findProductByPublicId(UUID productId) {
+        return productRepository.findByPublicId(productId)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+    }
+
+    private ProductEntity findProductByPublicIdForUpdate(UUID productId) {
+        return productRepository.findByPublicIdForUpdate(productId)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
     }
 
     private void ensureSellerOwnsProduct(ProductEntity product, Long userId) {
@@ -504,6 +494,13 @@ public class ProductService {
         if (product.getStatus() != ProductStatus.OFF
                 || product.getModerationStatus() != ModerationStatus.APPROVED) {
             throw new ProductStateException("Only approved OFF products can be published");
+        }
+    }
+
+    private void ensureSellerCanWithdrawProduct(ProductEntity product, Long userId) {
+        ensureSellerOwnsProduct(product, userId);
+        if (product.getStatus() != ProductStatus.ACTIVE) {
+            throw new ProductStateException("Only active products can be withdrawn from sale");
         }
     }
 

@@ -36,8 +36,8 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -105,7 +105,8 @@ public class ProductCardIntegrationTest {
                           "slug": "iphone-16-pro",
                           "name": "iphone 16 pro",
                           "description": "A sufficiently long product description for tests.",
-                          "price": 99990.00
+                          "price": 99990.00,
+                          "initialQuantity": 7
                         }
                         """.getBytes()
                                 ))
@@ -131,6 +132,10 @@ public class ProductCardIntegrationTest {
         assertThat(entity.getPrice()).isEqualByComparingTo("99990.00");
         assertThat(response.imageUrlList()).hasSize(1);
 
+        mockMvc.perform(get("/api/seller/products/{productId}/stock", uuid))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quantity").value(7));
+
         mockMvc.perform(
                 get("/api/products/{id}", uuid)
         )
@@ -152,7 +157,7 @@ public class ProductCardIntegrationTest {
         UUID secondImageId = UUID.fromString(images.get(1).get("uuid").asText());
 
         mockMvc.perform(
-                        patch("/api/products/{id}/details-images/positions", uuid)
+                        put("/api/products/{id}/details-images/order", uuid)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                         { "imageIds": ["%s", "%s"] }

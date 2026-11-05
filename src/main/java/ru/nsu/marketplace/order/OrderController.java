@@ -5,12 +5,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ru.nsu.marketplace.order.dto.OrderResponse;
+
+import java.net.URI;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -21,23 +22,20 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@AuthenticationPrincipal Long userId) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.createOrder(userId));
+        OrderResponse order = orderService.createOrder(userId);
+        return ResponseEntity.created(URI.create("/api/orders/" + order.id())).body(order);
     }
 
-    @GetMapping("/current")
-    public Page<OrderResponse> getCurrentOrders(
+    @GetMapping
+    public Page<OrderResponse> getOrders(
             @AuthenticationPrincipal Long userId,
+            @RequestParam(defaultValue = "CURRENT") View view,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return orderService.getCurrentOrders(userId, pageable);
-    }
-
-    @GetMapping("/history")
-    public Page<OrderResponse> getOrderHistory(
-            @AuthenticationPrincipal Long userId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
-    ) {
-        return orderService.getOrderHistory(userId, pageable);
+        return switch (view) {
+            case CURRENT -> orderService.getCurrentOrders(userId, pageable);
+            case HISTORY -> orderService.getOrderHistory(userId, pageable);
+        };
     }
 
     @GetMapping("/{orderId}")
@@ -48,5 +46,10 @@ public class OrderController {
     @PostMapping("/{orderId}/cancel")
     public OrderResponse cancelOrder(@AuthenticationPrincipal Long userId, @PathVariable Long orderId) {
         return orderService.cancelUserOrder(userId, orderId);
+    }
+
+    public enum View {
+        CURRENT,
+        HISTORY
     }
 }

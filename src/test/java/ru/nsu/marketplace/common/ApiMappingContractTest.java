@@ -20,6 +20,8 @@ import ru.nsu.marketplace.product.api.CatalogController;
 import ru.nsu.marketplace.product.api.ProductController;
 import ru.nsu.marketplace.product.api.SellerController;
 import ru.nsu.marketplace.product.moderation.ProductModerationController;
+import ru.nsu.marketplace.product.stock.ProductStockResponse;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 import ru.nsu.marketplace.review.ProductReviewController;
 import ru.nsu.marketplace.review.ProductReviewService;
 import ru.nsu.marketplace.review.moderation.ProductReviewAndReplyModerationController;
@@ -31,6 +33,7 @@ import ru.nsu.marketplace.user.AdminUserController;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +44,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ApiMappingContractTest {
     private MockMvc mockMvc;
     private ProductReviewService reviewService;
+    private ProductStockService stockService;
+    private ProductStockService sellerStockService;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -57,6 +62,12 @@ class ApiMappingContractTest {
             controllers[index] = constructor.newInstance(dependencies);
             for (Object dependency : dependencies) {
                 if (dependency instanceof ProductReviewService service) reviewService = service;
+                if (dependency instanceof ProductStockService service && types[index] == ProductController.class) {
+                    stockService = service;
+                }
+                if (dependency instanceof ProductStockService service && types[index] == SellerController.class) {
+                    sellerStockService = service;
+                }
             }
         }
         mockMvc = MockMvcBuilders.standaloneSetup(controllers)
@@ -79,14 +90,66 @@ class ApiMappingContractTest {
                 .collect(Collectors.toSet());
         assertThat(routes).contains(
                 "GET /api/admin/users/{userId}/cart", "POST /api/cart/items",
-                "GET /api/moderation/product-requests", "GET /api/moderation/review-requests",
-                "PATCH /api/moderation/review-replies/{reviewReplyId}",
+                "GET /api/admin/moderation/product-requests", "GET /api/admin/moderation/review-requests",
+                "PATCH /api/admin/moderation/review-replies/{reviewReplyId}",
                 "POST /api/reviews/{reviewId}/replies", "PUT /api/reviews/{reviewId}/reaction",
                 "PUT /api/review-replies/{replyId}/reaction", "POST /api/orders/{orderId}/cancel",
-                "POST /api/admin/orders/{orderId}/deliver", "POST /api/products/{productId}/archive");
+                "POST /api/admin/orders/{orderId}/deliver", "POST /api/products/{productId}/archive",
+                "GET /api/orders", "GET /api/products/stocks", "GET /api/seller/products/{productId}/stock",
+                "PATCH /api/seller/products/{productId}/stock",
+                "PUT /api/products/{productId}/details-images/order",
+                "POST /api/products/{productId}/moderation-requests/current/cancel");
         assertThat(routes).doesNotContain("POST /api/cart/{productId}", "GET /api/cart/{userId}",
                 "POST /api/reviews/{reviewId}/reply", "GET /api/moderation/review",
-                "GET /api/moderation/requests", "PATCH /api/orders/{orderId}/cancel");
+                "GET /api/moderation/requests", "PATCH /api/orders/{orderId}/cancel",
+                "GET /api/stocks", "GET /api/orders/current", "GET /api/orders/history",
+                "GET /api/moderation/product-requests", "GET /api/moderation/review-requests",
+                "PATCH /api/products/{id}/details-images/positions",
+                "POST /api/products/{productId}/moderation-requests/cancel");
+    }
+
+    @Test
+    void shouldReadStocksInOneRequestUsingPublicProductIds() throws Exception {
+        UUID firstProductId = UUID.randomUUID();
+        UUID secondProductId = UUID.randomUUID();
+        List<UUID> productIds = List.of(firstProductId, secondProductId);
+        when(stockService.getProductStocks(productIds)).thenReturn(List.of(
+                new ProductStockResponse(firstProductId, 7),
+                new ProductStockResponse(secondProductId, 0)
+        ));
+
+        mockMvc.perform(get("/api/products/stocks")
+                        .param("productIds", firstProductId.toString(), secondProductId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].productId").value(firstProductId.toString()))
+                .andExpect(jsonPath("$[1].quantity").value(0));
+
+        verify(stockService).getProductStocks(productIds);
+    }
+
+    @Test
+    void shouldApplySellerStockDeltaAndReturnUpdatedQuantity() throws Exception {
+        UUID productId = UUID.randomUUID();
+        when(sellerStockService.updateSellerProductStock(productId, 10L, -2))
+                .thenReturn(new ProductStockResponse(productId, 7));
+
+        mockMvc.perform(patch("/api/seller/products/{productId}/stock", productId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"delta\":-2}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quantity").value(7));
+
+        verify(sellerStockService).updateSellerProductStock(productId, 10L, -2);
+    }
+
+    @Test
+    void shouldRejectMissingStockDelta() throws Exception {
+        mockMvc.perform(patch("/api/seller/products/{productId}/stock", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(sellerStockService);
     }
 
     @Test

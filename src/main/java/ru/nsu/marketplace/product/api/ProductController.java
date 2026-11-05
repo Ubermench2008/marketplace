@@ -16,6 +16,8 @@ import ru.nsu.marketplace.product.dto.ProductDetailsImageResponse;
 import ru.nsu.marketplace.product.dto.ProductDetailsResponse;
 import ru.nsu.marketplace.product.dto.UpdateProductImageOrderRequest;
 import ru.nsu.marketplace.product.dto.UpdateProductRequest;
+import ru.nsu.marketplace.product.stock.ProductStockResponse;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 
 import java.util.List;
 import java.net.URI;
@@ -26,10 +28,16 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ProductController {
     private final ProductService productService;
+    private final ProductStockService productStockService;
 
-    @GetMapping("/{id}")
-    public ProductDetailsResponse getProduct(@PathVariable("id") UUID productId) {
+    @GetMapping("/{productId}")
+    public ProductDetailsResponse getProduct(@PathVariable UUID productId) {
         return productService.getProduct(productId);
+    }
+
+    @GetMapping("/stocks")
+    public List<ProductStockResponse> getProductStocks(@RequestParam List<UUID> productIds) {
+        return productStockService.getProductStocks(productIds);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -44,15 +52,15 @@ public class ProductController {
         return ResponseEntity.created(URI.create("/api/products/" + response.id())).body(response);
     }
 
-    @GetMapping("/{id}/details-images")
-    public List<ProductDetailsImageResponse> getProductDetailsImages(@PathVariable("id") UUID productId) {
+    @GetMapping("/{productId}/details-images")
+    public List<ProductDetailsImageResponse> getProductDetailsImages(@PathVariable UUID productId) {
         return productService.getProductDetailsImages(productId);
     }
 
-    @PostMapping(value = "/{id}/details-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/{productId}/details-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<List<ProductDetailsImageResponse>> addProductDetailsImages(
-            @PathVariable("id") UUID productId,
+            @PathVariable UUID productId,
             @RequestPart("images") List<MultipartFile> images,
             @AuthenticationPrincipal Long userId
     ) {
@@ -60,30 +68,30 @@ public class ProductController {
                 .body(productService.addProductDetailsImages(productId, images, userId));
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/{productId}")
     @PreAuthorize("hasRole('SELLER')")
     public ProductDetailsResponse updateProduct(
-            @PathVariable("id") UUID productId,
+            @PathVariable UUID productId,
             @RequestBody @Valid UpdateProductRequest request,
             @AuthenticationPrincipal Long userId
     ) {
         return productService.updateProduct(productId, userId, request);
     }
 
-    @PatchMapping("/{id}/details-images/positions")
+    @PutMapping("/{productId}/details-images/order")
     @PreAuthorize("hasRole('SELLER')")
     public List<ProductDetailsImageResponse> updateProductImageOrder(
-            @PathVariable("id") UUID productId,
+            @PathVariable UUID productId,
             @RequestBody @Valid UpdateProductImageOrderRequest request,
             @AuthenticationPrincipal Long userId
     ) {
         return productService.updateProductImageOrder(productId, request, userId);
     }
 
-    @DeleteMapping("/{id}/details-images/{imageId}")
+    @DeleteMapping("/{productId}/details-images/{imageId}")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<Void> deleteProductDetailsImage(
-            @PathVariable("id") UUID productId,
+            @PathVariable UUID productId,
             @PathVariable UUID imageId,
             @AuthenticationPrincipal Long userId
     ) {
@@ -91,10 +99,10 @@ public class ProductController {
         return ResponseEntity.noContent().build();
     }
 
-    @PutMapping(value = "/{id}/preview-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(value = "/{productId}/preview-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('SELLER')")
     public ProductCardResponse updateProductPreview(
-            @PathVariable("id") UUID productId,
+            @PathVariable UUID productId,
             @RequestPart("previewImage") MultipartFile preview,
             @AuthenticationPrincipal Long userId
     ) {
@@ -111,7 +119,7 @@ public class ProductController {
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @PostMapping("/{productId}/moderation-requests/cancel")
+    @PostMapping("/{productId}/moderation-requests/current/cancel")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<Void> cancelProductModerationRequest(
             @PathVariable UUID productId,

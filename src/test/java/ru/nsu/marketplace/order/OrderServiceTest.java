@@ -12,11 +12,14 @@ import org.springframework.data.domain.Pageable;
 import ru.nsu.marketplace.cart.CartEntity;
 import ru.nsu.marketplace.cart.CartItemEntity;
 import ru.nsu.marketplace.cart.CartRepository;
+import ru.nsu.marketplace.cart.CartService;
 import ru.nsu.marketplace.cart.exception.CartNotFoundException;
 import ru.nsu.marketplace.order.dto.OrderResponse;
 import ru.nsu.marketplace.order.exception.OrderNotFoundException;
 import ru.nsu.marketplace.order.exception.OrderStateException;
 import ru.nsu.marketplace.product.model.ProductEntity;
+import ru.nsu.marketplace.product.stock.ProductStockEntity;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 import ru.nsu.marketplace.user.UserEntity;
 import ru.nsu.marketplace.user.UserRepository;
 import ru.nsu.marketplace.user.exception.UserNotFoundException;
@@ -44,12 +47,19 @@ public class OrderServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private CartService cartService;
+
+    @Mock
+    private ProductStockService stockService;
+
     @InjectMocks
     private OrderService service;
 
     @Test
     void shouldCreateOrderWithFixedPricesAndClearCart() {
         CartEntity cart = cart();
+        stubCartStocks(cart);
         ProductEntity product = cart.getItems().getFirst().getProduct();
         when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
         when(orderRepository.saveAndFlush(any())).thenAnswer(invocation -> {
@@ -101,6 +111,7 @@ public class OrderServiceTest {
     @Test
     void shouldNotClearCartWhenOrderCannotBeSaved() {
         CartEntity cart = cart();
+        stubCartStocks(cart);
         when(cartRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(cart));
         when(orderRepository.saveAndFlush(any())).thenThrow(new IllegalStateException("Database failure"));
 
@@ -140,7 +151,7 @@ public class OrderServiceTest {
     }
 
     @Test
-    void shouldCancelOwnOrderWithoutReturningItemsToCart() {
+    void shouldCancelOwnOrderAndRestoreCart() {
         OrderEntity order = order(OrderStatus.IN_DELIVERY);
         when(orderRepository.findUserOrderForUpdate(1L, 10L)).thenReturn(Optional.of(order));
 
@@ -148,7 +159,7 @@ public class OrderServiceTest {
 
         assertThat(response.status()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(response.deliveredAt()).isNull();
-        verifyNoInteractions(cartRepository);
+        verify(cartService).restoreUserCartFromItems(order.getItems(), 10L);
     }
 
     @Test
@@ -168,12 +179,36 @@ public class OrderServiceTest {
     }
 
     @Test
-    void shouldAllowRepeatedCancellation() {
+    void shouldRejectRepeatedCancellation() {
         when(orderRepository.findUserOrderForUpdate(1L, 10L)).thenReturn(
             Optional.of(order(OrderStatus.CANCELLED))
         );
 
-        assertThat(service.cancelUserOrder(10L, 1L).status()).isEqualTo(OrderStatus.CANCELLED);
+        assertThrows(OrderStateException.class, () -> service.cancelUserOrder(10L, 1L));
+        verifyNoInteractions(cartService, stockService);
+    }
+
+    @Test
+    void shouldReturnDeductedStockOnlyOnceOnCancellation() {
+        OrderEntity order = order(OrderStatus.IN_DELIVERY);
+        ProductEntity product = ProductEntity.builder().id(20L).publicId(UUID.randomUUID()).build();
+        order.getItems().add(OrderItemEntity.builder()
+                .order(order)
+                .product(product)
+                .quantity(3)
+                .unitPrice(BigDecimal.ONE)
+                .build());
+
+        ProductStockEntity stock = new ProductStockEntity(20L, product, 2);
+        when(orderRepository.findOrderForUpdate(1L)).thenReturn(Optional.of(order));
+        when(stockService.getProductStockEntityForUpdate(20L)).thenReturn(stock);
+
+        assertThat(service.cancelOrderByAdmin(1L).status()).isEqualTo(OrderStatus.CANCELLED);
+        assertThrows(OrderStateException.class, () -> service.cancelOrderByAdmin(1L));
+
+        assertThat(stock.getQuantity()).isEqualTo(5);
+        verify(stockService).getProductStockEntityForUpdate(20L);
+        verify(cartService).restoreUserCartFromItems(order.getItems(), 10L);
     }
 
     @Test
@@ -271,7 +306,17 @@ public class OrderServiceTest {
         cart.setUser(UserEntity.builder().id(10L).build());
         cart.getItems().add(cartItem(cart, "19.90", 2));
         cart.getItems().add(cartItem(cart, "5.00", 2));
+        cart.getItems().getFirst().getProduct().setId(20L);
+        cart.getItems().getLast().getProduct().setId(21L);
         return cart;
+    }
+
+    private void stubCartStocks(CartEntity cart) {
+        for (CartItemEntity item : cart.getItems()) {
+            ProductEntity product = item.getProduct();
+            ProductStockEntity stock = new ProductStockEntity(product.getId(), product, 10);
+            when(stockService.getProductStockEntityForUpdate(product.getId())).thenReturn(stock);
+        }
     }
 
     private CartItemEntity cartItem(CartEntity cart, String price, int quantity) {

@@ -18,6 +18,7 @@ import ru.nsu.marketplace.auth.JwtAuthenticationFilter;
 import ru.nsu.marketplace.auth.JwtService;
 import ru.nsu.marketplace.auth.SecurityConfig;
 import ru.nsu.marketplace.product.ProductService;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 
 import java.util.List;
 import java.util.UUID;
@@ -39,6 +40,9 @@ public class ProductModificationSecurityTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private ProductStockService productStockService;
 
     @ParameterizedTest
     @ValueSource(strings = {"create", "fields", "addProductDetailsImages", "positions", "deleteImage", "preview", "archive"})
@@ -96,7 +100,8 @@ public class ProductModificationSecurityTest {
                               "slug": "iphone-16-pro",
                               "name": "iphone 16 pro",
                               "description": "A sufficiently long product description for tests.",
-                              "price": 99990.00
+                              "price": 99990.00,
+                              "initialQuantity": 0
                             }
                             """.getBytes()))
                     .file(image("previewImage"))
@@ -106,7 +111,7 @@ public class ProductModificationSecurityTest {
                     .content("{\"name\":\"New name\"}");
             case "addProductDetailsImages" -> multipart("/api/products/{id}/details-images", productId)
                     .file(image("images"));
-            case "positions" -> patch("/api/products/{id}/details-images/positions", productId)
+            case "positions" -> put("/api/products/{id}/details-images/order", productId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"imageIds\":[\"" + UUID.randomUUID() + "\"]}");
             case "deleteImage" -> delete("/api/products/{id}/details-images/{imageId}", productId, UUID.randomUUID());

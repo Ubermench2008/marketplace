@@ -13,8 +13,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @EnableMethodSecurity
@@ -25,21 +25,22 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter authenticationFilter;
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityErrorWriter errorWriter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/favicon.svg", "/assets/**").permitAll()
                         .requestMatchers(
-                                "/api/auth/register",
-                                "/api/auth/login",
-                                "/api/catalog/**",
-                                "/media/**"
+                                HttpMethod.POST,
+                                "/api/auth/register", "/api/auth/login"
                         ).permitAll()
-
-                        .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/", "/index.html", "/favicon.svg", "/assets/**", "/media/**",
+                                "/api/catalog/products",
+                                "/api/products/{productId}",
+                                "/api/products/{productId}/details-images",
+                                "/api/products/{productId}/reviews",
+                                "/api/products/stocks",
                                 "/api/reviews/{reviewId}/replies",
                                 "/api/reviews/{reviewId}/replies/children"
                         ).permitAll()
@@ -50,7 +51,8 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .exceptionHandling(exceptionHandling -> exceptionHandling
-                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+                        .authenticationEntryPoint((request, response, exception) ->
+                                errorWriter.write(response, HttpStatus.UNAUTHORIZED, "Authentication required"))
                         .accessDeniedHandler((request, response, exception) -> {
                             Object userId = SecurityContextHolder.getContext()
                                     .getAuthentication()
@@ -61,7 +63,7 @@ public class SecurityConfig {
                                     request.getMethod(),
                                     request.getRequestURI());
 
-                            response.setStatus(HttpStatus.FORBIDDEN.value());
+                            errorWriter.write(response, HttpStatus.FORBIDDEN, "Access denied");
                         })
                 )
                 .addFilterBefore(
@@ -70,6 +72,11 @@ public class SecurityConfig {
                 );
 
         return http.build();
+    }
+
+    @Bean
+    static SecurityErrorWriter securityErrorWriter(ObjectMapper objectMapper) {
+        return new SecurityErrorWriter(objectMapper);
     }
 
     @Bean

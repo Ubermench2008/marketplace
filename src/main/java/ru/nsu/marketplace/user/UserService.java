@@ -126,7 +126,7 @@ public class UserService {
                 .filter(user -> !user.getId().equals(excludedUserId))
                 .ifPresent(user -> {
                     throw new TelephoneAlreadyExistsException(
-                            "Номер телефона уже зарегистрирован"
+                            "Telephone number is already registered"
                     );
                 });
     }
@@ -140,7 +140,7 @@ public class UserService {
                 .filter(user -> !user.getId().equals(excludedUserId))
                 .ifPresent(user -> {
                     throw new EmailAlreadyExistsException(
-                            "Email уже зарегистрирован"
+                            "Email is already registered"
                     );
                 });
     }

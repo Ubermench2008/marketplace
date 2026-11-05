@@ -13,7 +13,7 @@ public class PhoneNumberService {
 
     public String normalize(String rawTelephone) {
         if (rawTelephone == null || rawTelephone.isBlank()) {
-            throw new InvalidPhoneNumberException("Номер телефона обязателен");
+            throw new InvalidPhoneNumberException("Telephone number is required");
         }
 
         try {
@@ -21,7 +21,7 @@ public class PhoneNumberService {
                     phoneNumberUtil.parse(rawTelephone, null);
 
             if (!phoneNumberUtil.isValidNumber(phoneNumber)) {
-                throw new InvalidPhoneNumberException("Невалидный номер телефона");
+                throw new InvalidPhoneNumberException("Invalid telephone number");
             }
 
             return phoneNumberUtil.format(
@@ -30,7 +30,7 @@ public class PhoneNumberService {
             );
         } catch (NumberParseException exception) {
             throw new InvalidPhoneNumberException(
-                    "Ошибка при проверке номера телефона",
+                    "Could not validate telephone number",
                     exception
             );
         }

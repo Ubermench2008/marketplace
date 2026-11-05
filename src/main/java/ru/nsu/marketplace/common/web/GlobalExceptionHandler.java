@@ -22,6 +22,7 @@ import ru.nsu.marketplace.product.exception.ModerationRequestNotFoundException;
 import ru.nsu.marketplace.product.exception.ProductModerationStateException;
 import ru.nsu.marketplace.product.exception.ProductNotFoundException;
 import ru.nsu.marketplace.product.exception.ProductStateException;
+import ru.nsu.marketplace.product.stock.exception.ProductStockNotFoundException;
 import ru.nsu.marketplace.review.exception.ProductReviewNotFoundException;
 import ru.nsu.marketplace.review.exception.ProductReviewStateException;
 import ru.nsu.marketplace.review.exception.ReviewReplyNotFoundException;
@@ -138,7 +139,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({CartNotFoundException.class, CartItemNotFoundException.class,
             OrderNotFoundException.class, ModerationRequestNotFoundException.class, ProductReviewNotFoundException.class,
-            ReactionNotFoundException.class, ReviewReplyNotFoundException.class})
+            ReactionNotFoundException.class, ReviewReplyNotFoundException.class, ProductStockNotFoundException.class})
     public ResponseEntity<ApiErrorResponse> handleResourceNotFound(RuntimeException exception) {
         ApiErrorResponse response = new ApiErrorResponse(
                 HttpStatus.NOT_FOUND.value(),
@@ -167,7 +168,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
         ApiErrorResponse response = new ApiErrorResponse(
                 401,
-                "Неверные данные для входа",
+                "Invalid login or password",
                 List.of(),
                 Instant.now()
         );

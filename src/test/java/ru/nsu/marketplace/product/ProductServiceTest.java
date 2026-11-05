@@ -29,6 +29,7 @@ import ru.nsu.marketplace.product.model.ProductCardEntity;
 import ru.nsu.marketplace.product.model.ProductDetailsImageEntity;
 import ru.nsu.marketplace.product.model.ProductEntity;
 import ru.nsu.marketplace.product.moderation.ProductModerationRepository;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 import ru.nsu.marketplace.user.Role;
 import ru.nsu.marketplace.user.UserEntity;
 import ru.nsu.marketplace.user.UserRepository;
@@ -70,6 +71,9 @@ public class ProductServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private ProductStockService productStockService;
 
     @Test
     void shouldReturnCards() {
@@ -137,7 +141,8 @@ public class ProductServiceTest {
             "iphone-16-pro",
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
-            new BigDecimal("99990.00")
+            new BigDecimal("99990.00"),
+            0
         );
 
         MultipartFile previewImage = image("previewImage");
@@ -174,7 +179,8 @@ public class ProductServiceTest {
             "iphone-16-pro",
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
-            new BigDecimal("99990.00")
+            new BigDecimal("99990.00"),
+            0
         );
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
@@ -192,7 +198,8 @@ public class ProductServiceTest {
             "iphone-16-pro",
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
-            new BigDecimal("99990.00")
+            new BigDecimal("99990.00"),
+            0
         );
 
         when(userRepository.findById(10L)).thenReturn(Optional.of(seller()));
@@ -425,7 +432,8 @@ public class ProductServiceTest {
             "iphone-16-pro",
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
-            new BigDecimal("99990.00")
+            new BigDecimal("99990.00"),
+            0
         );
         UserEntity buyer = UserEntity.builder().id(10L).roles(Set.of(Role.BUYER)).build();
         when(userRepository.findById(10L)).thenReturn(Optional.of(buyer));

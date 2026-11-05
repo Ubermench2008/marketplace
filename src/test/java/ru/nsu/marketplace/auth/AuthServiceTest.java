@@ -98,7 +98,7 @@ public class AuthServiceTest {
             service.register(request)
         );
 
-        assertThat(exception.getMessage()).isEqualTo("Номер телефона уже зарегистрирован");
+        assertThat(exception.getMessage()).isEqualTo("Telephone number is already registered");
         verify(repository, never()).save(any(UserEntity.class));
         verifyNoInteractions(cartRepository);
     }
@@ -120,7 +120,7 @@ public class AuthServiceTest {
             service.register(request)
         );
 
-        assertThat(exception.getMessage()).isEqualTo("Email уже зарегистрирован");
+        assertThat(exception.getMessage()).isEqualTo("Email is already registered");
         verify(repository, never()).save(any(UserEntity.class));
         verifyNoInteractions(cartRepository);
     }
@@ -159,7 +159,7 @@ public class AuthServiceTest {
             service.login(request)
         );
 
-        assertThat(exception.getMessage()).isEqualTo("Неверный логин или пароль");
+        assertThat(exception.getMessage()).isEqualTo("Invalid login or password");
 
         verifyNoInteractions(encoder, jwtService);
     }
@@ -183,7 +183,7 @@ public class AuthServiceTest {
             service.login(request)
         );
 
-        assertThat(exception.getMessage()).isEqualTo("Неверный логин или пароль");
+        assertThat(exception.getMessage()).isEqualTo("Invalid login or password");
 
         verifyNoInteractions(jwtService);
         verify(encoder).matches("incorrectPassword", "correctHashedPassword");
@@ -199,7 +199,7 @@ public class AuthServiceTest {
             service.login(request)
         );
 
-        assertThat(exception.getMessage()).isEqualTo("Неверный логин или пароль");
+        assertThat(exception.getMessage()).isEqualTo("Invalid login or password");
 
         verifyNoInteractions(repository, encoder, jwtService);
     }

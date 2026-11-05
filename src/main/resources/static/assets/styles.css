@@ -222,6 +222,9 @@
     .badge-REJECTED, .badge-CANCELLED { background: #fae6dd; color: #a35436; }
     .badge-ADMIN { background: #e5e6f0; color: #646384; }
     .badge-SELLER { background: #dcece5; color: #3a6b59; }
+    .stock-available { background: #e4efd9; color: #477336; }
+    .stock-unavailable { background: #fae6dd; color: #88452e; }
+    .stock-unknown { background: #fff0cd; color: #78581d; white-space: normal; }
     .small-banner { margin-top: 50px; padding: 28px 34px; border: 1px solid var(--line); border-radius: 18px; display: flex; align-items: center; gap: 24px; }
     .banner-icon { width: 56px; height: 56px; background: #e9efdf; border-radius: 50%; display: grid; place-items: center; }
     .small-banner h3 { font-size: 20px; }
@@ -241,6 +244,12 @@
     .section-number { font-size: 11px; background: #edf2e6; padding: 7px; color: #78945f; border-radius: 7px; letter-spacing: 0; }
     .stack-form { display: grid; gap: 20px; }
     .form-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .stock-editor { margin: 0 0 24px; }
+    .stock-editor-heading { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+    .stock-editor-heading h2 { font-size: 21px; margin: 0 0 6px; }
+    .stock-editor-count { border-radius: 10px; padding: 6px 12px; background: #e4efd9; color: #477336; white-space: nowrap; }
+    .stock-quantity { font-size: 20px; }
+    .stock-preview:empty { display: none; }
     .form-error { background: #fff0e9; color: #a3442a; border: 1px solid #efd4c4; padding: 16px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; overflow-wrap: anywhere; }
     .form-error .button { margin-top: 12px; }
     .notice { background: #edf2e7; color: #5c7350; border: 1px solid #dde8d2; padding: 16px 20px; font-size: 13px; border-radius: 12px; margin-bottom: 26px; }
@@ -306,6 +315,7 @@
     .summary-total strong { font-size: 25px; letter-spacing: -.05em; }
     .order-summary .button { width: 100%; margin: 24px 0 16px; }
     .order-summary .notice { margin: 20px 0 0; font-size: 11px; }
+    .order-summary .refresh-stocks { margin-top: 16px; }
     .tabs { display: flex; border-bottom: 1px solid var(--line); gap: 28px; margin-bottom: 30px; overflow-x: auto; }
     .tab { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 12px 0 15px; color: var(--muted); white-space: nowrap; font-size: 14px; }
     .tab.active { color: var(--ink); border-bottom-color: var(--green); font-weight: 600; }

@@ -21,11 +21,12 @@ import ru.nsu.marketplace.review.dto.UpdateProductReviewRequest;
 import java.util.UUID;
 
 @RestController
+@RequestMapping("/api")
 @RequiredArgsConstructor
 public class ProductReviewController {
     private final ProductReviewService reviewService;
 
-    @GetMapping("/api/products/{productId}/reviews")
+    @GetMapping("/products/{productId}/reviews")
     public Page<ProductReviewResponse> getProductReviews(
             @PathVariable UUID productId,
             @PageableDefault(size = 20, sort = {"createdAt", "id"}, direction = Sort.Direction.DESC) Pageable pageable
@@ -33,7 +34,7 @@ public class ProductReviewController {
         return reviewService.getProductReviews(productId, pageable);
     }
 
-    @GetMapping("/api/products/{productId}/reviews/my")
+    @GetMapping("/products/{productId}/reviews/my")
     @PreAuthorize("hasAnyRole('BUYER', 'SELLER')")
     public MyProductReviewResponse getMyProductReview(
             @PathVariable UUID productId,
@@ -42,7 +43,7 @@ public class ProductReviewController {
         return reviewService.getMyProductReview(productId, userId);
     }
 
-    @GetMapping("/api/reviews/{reviewId}/replies")
+    @GetMapping("/reviews/{reviewId}/replies")
     public Page<ProductReviewReplyResponse> getProductReviewReplies(
             @PathVariable Long reviewId,
             @AuthenticationPrincipal Long userId,
@@ -51,7 +52,7 @@ public class ProductReviewController {
         return reviewService.getProductReviewReplies(reviewId, pageable, userId);
     }
 
-    @PostMapping("/api/reviews/{reviewId}/replies")
+    @PostMapping("/reviews/{reviewId}/replies")
     @PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
     public ResponseEntity<Void> createProductReviewReply(
             @PathVariable Long reviewId,
@@ -62,7 +63,7 @@ public class ProductReviewController {
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @GetMapping("/api/reviews/{reviewId}/replies/children")
+    @GetMapping("/reviews/{reviewId}/replies/children")
     public Page<ProductReviewReplyResponse> getDirectReplies(
         @PathVariable Long reviewId,
         @RequestParam(required = false) Long parentId,
@@ -72,7 +73,7 @@ public class ProductReviewController {
         return reviewService.getDirectReplies(reviewId, parentId, pageable, userId);
     }
 
-    @PostMapping("/api/products/{productId}/reviews")
+    @PostMapping("/products/{productId}/reviews")
     @PreAuthorize("hasAnyRole('BUYER', 'SELLER')")
     public ResponseEntity<MyProductReviewResponse> createProductReview(
             @PathVariable UUID productId,
@@ -84,7 +85,7 @@ public class ProductReviewController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PatchMapping("/api/reviews/{reviewId}")
+    @PatchMapping("/reviews/{reviewId}")
     @PreAuthorize("hasAnyRole('BUYER', 'SELLER')")
     public MyProductReviewResponse updateProductReview(
             @PathVariable Long reviewId,
@@ -94,7 +95,7 @@ public class ProductReviewController {
         return reviewService.updateProductReview(reviewId, userId, request);
     }
 
-    @DeleteMapping("/api/reviews/{reviewId}")
+    @DeleteMapping("/reviews/{reviewId}")
     @PreAuthorize("hasAnyRole('BUYER', 'SELLER')")
     public ResponseEntity<Void> deleteProductReview(
             @PathVariable Long reviewId,

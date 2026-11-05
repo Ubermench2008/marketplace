@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -23,6 +24,7 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final SecurityErrorWriter errorWriter;
 
     @Override
     protected void doFilterInternal(
@@ -63,7 +65,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     request.getRequestURI(),
                     exception.getClass().getSimpleName());
 
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            errorWriter.write(response, HttpStatus.UNAUTHORIZED, "Invalid access token");
             return;
         }
 

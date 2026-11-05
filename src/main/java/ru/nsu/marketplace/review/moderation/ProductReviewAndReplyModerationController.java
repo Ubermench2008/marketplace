@@ -20,7 +20,7 @@ import ru.nsu.marketplace.review.reply.dto.ReviewReplyStatusUpdateRequest;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/moderation")
+@RequestMapping("/api/admin/moderation")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class ProductReviewAndReplyModerationController {

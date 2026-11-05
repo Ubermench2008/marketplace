@@ -12,16 +12,18 @@ import org.springframework.web.bind.annotation.RequestBody;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.util.List;
 
 @RequiredArgsConstructor
 @RestController
+@RequestMapping("/api/reviews")
+@PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
 public class ProductReviewReactionController {
     private final ProductReviewReactionService service;
 
-    @GetMapping("/api/reviews/reactions/my")
-    @PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
+    @GetMapping("/reactions/my")
     public List<MyReviewReactionResponse> getMyReactions(
             @AuthenticationPrincipal Long userId,
             @RequestParam List<Long> reviewIds
@@ -29,8 +31,7 @@ public class ProductReviewReactionController {
         return service.getMyReactions(userId, reviewIds);
     }
 
-    @PutMapping("/api/reviews/{reviewId}/reaction")
-    @PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
+    @PutMapping("/{reviewId}/reaction")
     public ResponseEntity<Void> setReaction(
             @PathVariable Long reviewId,
             @AuthenticationPrincipal Long userId,
@@ -40,8 +41,7 @@ public class ProductReviewReactionController {
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping("/api/reviews/{reviewId}/reaction")
-    @PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
+    @DeleteMapping("/{reviewId}/reaction")
     public ResponseEntity<Void> deleteReaction(
             @PathVariable Long reviewId,
             @AuthenticationPrincipal Long userId

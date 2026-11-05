@@ -24,8 +24,46 @@ function notifyCart() {
     window.dispatchEvent(new Event('cartchange'));
 }
 
-export function productCard(product, seller = false) {
+async function loadStocks(products) {
+    const productIds = new Set(
+        products.filter((product) => product.status === 'ACTIVE').map((product) => product.id)
+    );
+    if (!productIds.size) return new Map();
+
+    const query = new URLSearchParams();
+    for (const id of productIds) {
+        query.append('productIds', id);
+    }
+
+    try {
+        const stocks = await api(`/products/stocks?${query}`, { publicRequest: true });
+        return new Map(stocks.map((stock) => [stock.productId, stock.quantity]));
+    } catch {
+        return new Map();
+    }
+}
+
+function stockLabel(product, quantity) {
+    if (product.status !== 'ACTIVE') return 'Не в продаже';
+    if (quantity == null) return 'Остаток не удалось узнать';
+    if (quantity === 0) return 'Нет в наличии';
+    return `В наличии: ${quantity} шт.`;
+}
+
+function stockBadge(product, quantity) {
+    let style = 'stock-unknown';
+    if (product.status !== 'ACTIVE' || quantity === 0) {
+        style = 'stock-unavailable';
+    } else if (quantity > 0) {
+        style = 'stock-available';
+    }
+
+    return `<span class="badge ${style}">${e(stockLabel(product, quantity))}</span>`;
+}
+
+export function productCard(product, seller = false, quantity) {
     const href = seller ? `#/seller/products/${product.id}` : `#/products/${product.id}`;
+    const canAdd = product.status === 'ACTIVE' && quantity !== 0;
     return (
         `<article class="product-card">` +
         `<a class="product-image-link" href="${href}">${image(product.imgUrl, product.name)}<span class="product-state">${badge(product.status)}</span>` +
@@ -34,11 +72,11 @@ export function productCard(product, seller = false) {
         `<div class="product-price">${money(product.price)}</div>` +
         `<a class="product-name" href="${href}">${e(product.name)}</a>` +
         `<div class="product-card-bottom">` +
-        `<span class="muted">${seller ? 'Ваш товар' : 'Находка рядом'}</span>${
+        `${seller ? '<span class="muted">Ваш товар</span>' : stockBadge(product, quantity)}${
             seller
                 ? `<a href="${href}" class="icon-button" aria-label="Редактировать ${e(product.name)}">${icon('edit')}</a>`
                 : !hasRole('ADMIN')
-                  ? `<button type="button" class="add-cart-button" data-add="${e(product.id)}" ${product.status !== 'ACTIVE' ? 'disabled' : ''} aria-label="Добавить ${e(product.name)} в корзину">${icon('plus')}</button>`
+                  ? `<button type="button" class="add-cart-button" data-add="${e(product.id)}" ${canAdd ? '' : 'disabled'} aria-label="Добавить ${e(product.name)} в корзину">${icon('plus')}</button>`
                   : ''
         }</div>` +
         `</div>` +
@@ -129,10 +167,13 @@ export async function catalogPage(view) {
             const page = pageData(
                 await api(`/catalog/products?${pageQuery(number, sort.value)}`, { publicRequest: true })
             );
-            if (ownRevision !== revision) return;
+            const stocks = await loadStocks(page.items);
+            if (!view.isConnected || ownRevision !== revision) return;
             view.querySelector('.catalog-total').textContent = page.total;
             area.innerHTML = page.items.length
-                ? `<div class="product-grid">${page.items.map((product) => productCard(product)).join('')}</div>`
+                ? `<div class="product-grid">${page.items
+                      .map((product) => productCard(product, false, stocks.get(product.id)))
+                      .join('')}</div>`
                 : empty('Пока без находок', 'Когда продавцы добавят товары, они появятся здесь.', null);
             bindCartButtons(area);
             pagination(area, page, load);
@@ -146,9 +187,12 @@ export async function catalogPage(view) {
 
 export async function productPage(view, id) {
     const product = await api(`/products/${encodeURIComponent(id)}`, { publicRequest: true });
+    const stocks = await loadStocks([product]);
     if (!view.isConnected) return;
     document.title = `${product.name} — Рядом`;
     const active = product.status === 'ACTIVE';
+    const quantity = stocks.get(product.id);
+    const canAdd = active && quantity !== 0;
     view.innerHTML =
         `<a class="back-link" href="#/catalog">← Каталог</a>` +
         `<div class="product-layout">` +
@@ -156,10 +200,15 @@ export async function productPage(view, id) {
         `</section>` +
         `<section class="product-details">` +
         `<div class="eyebrow">ВАША НОВАЯ НАХОДКА</div>` +
-        `<div class="status-row">${badge(product.status)}</div>` +
+        `<div class="status-row">${badge(product.status)}${stockBadge(product, quantity)}</div>` +
         `<h1>${e(product.name)}</h1>` +
         `<span class="product-slug">${e(product.slug)}</span>` +
-        `<div class="details-price">${money(product.price)}</div>${!hasRole('ADMIN') ? `<button type="button" class="button buy-button" ${!active ? 'disabled' : ''}>${icon('cart')} ${active ? 'Добавить в корзину' : 'Сейчас недоступен'}</button>` : ''}<p class="fine-print">${active ? 'Окончательная стоимость фиксируется при оформлении заказа.' : 'Этот товар сейчас нельзя заказать.'}</p>` +
+        `<div class="details-price">${money(product.price)}</div>` +
+        (!hasRole('ADMIN')
+            ? `<button type="button" class="button buy-button" ${canAdd ? '' : 'disabled'}>` +
+              `${icon('cart')} ${canAdd ? 'Добавить в корзину' : 'Сейчас недоступен'}</button>`
+            : '') +
+        `<p class="fine-print">${active ? 'Окончательная стоимость фиксируется при оформлении заказа.' : 'Этот товар сейчас нельзя заказать.'}</p>` +
         `<div class="description">` +
         `<h2>О товаре</h2>` +
         `<p>${e(product.description)}</p>` +
@@ -174,7 +223,7 @@ export async function productPage(view, id) {
         product.name
     );
     const button = view.querySelector('.buy-button');
-    if (button && active) {
+    if (button && canAdd) {
         button.dataset.add = product.id;
         bindCartButtons(view);
     }
@@ -272,7 +321,7 @@ export async function cartPage(view) {
     view.innerHTML = `${pageHeading('ВАШИ НАХОДКИ', 'Корзина', 'Всё, что понравилось, — в одном месте.')}<div class="cart-content"></div>`;
     const area = view.querySelector('.cart-content');
     let pending = false;
-    const load = async () => {
+    const load = async (checkoutNotice = '') => {
         loading(area);
         try {
             const cart = await api('/cart');
@@ -283,7 +332,19 @@ export async function cartPage(view) {
                 );
                 return;
             }
+            const stocks = await loadStocks(cart.items.map((item) => item.product));
+            if (!view.isConnected) return;
             const unavailable = cart.items.some((item) => item.product.status !== 'ACTIVE');
+            const unknown = cart.items.some((item) => item.product.status === 'ACTIVE' && !stocks.has(item.product.id));
+            const insufficient = cart.items.some((item) => {
+                const available = stocks.get(item.product.id);
+                return available != null && item.quantity > available;
+            });
+            const canCheckout = !unavailable && !unknown && !insufficient;
+            const warnings = [];
+            if (unavailable) warnings.push('Удалите товары, которые больше не продаются.');
+            if (insufficient) warnings.push('Уменьшите количество или удалите позиции, которых не хватает.');
+            if (unknown) warnings.push('Не удалось проверить наличие. Обновите остатки перед оформлением.');
             const quantity = cart.items.reduce((sum, item) => sum + item.quantity, 0);
             area.innerHTML =
                 `<div class="cart-layout">` +
@@ -293,22 +354,32 @@ export async function cartPage(view) {
                 `</h2>` +
                 `<button class="text-button clear-cart" type="button">Очистить корзину</button>` +
                 `</div>${cart.items
-                    .map(
-                        (item) =>
+                    .map((item) => {
+                        const available = stocks.get(item.product.id);
+                        const canIncrease = item.product.status === 'ACTIVE' && available > item.quantity;
+                        const shortage = item.product.status === 'ACTIVE' && available < item.quantity;
+                        let adjust = '';
+                        if (shortage && available > 0) {
+                            adjust = `<button type="button" class="text-button" data-quantity="${available}" ` +
+                                `data-item-id="${item.id}">Оставить ${available} шт.</button>`;
+                        }
+                        return (
                             `<article class="cart-item" data-item="${item.id}">` +
                             `<a href="#/products/${e(item.product.id)}">${image(item.product.imgUrl, item.product.name)}</a>` +
                             `<div class="cart-item-info">` +
                             `<a class="item-name" href="#/products/${e(item.product.id)}">${e(item.product.name)}</a>${badge(item.product.status)}<span class="muted">${money(item.product.price)} / шт.</span>` +
+                            `${stockBadge(item.product, available)}${adjust}` +
                             `</div>` +
                             `<div class="quantity-control">` +
                             `<button type="button" data-quantity="${item.quantity - 1}" data-item-id="${item.id}" ${item.quantity <= 1 ? 'disabled' : ''} aria-label="Уменьшить количество ${e(item.product.name)}">−</button>` +
                             `<span aria-label="Количество">${item.quantity}</span>` +
-                            `<button type="button" data-quantity="${item.quantity + 1}" data-item-id="${item.id}" aria-label="Увеличить количество ${e(item.product.name)}">+</button>` +
+                            `<button type="button" data-quantity="${item.quantity + 1}" data-item-id="${item.id}" ${canIncrease ? '' : 'disabled'} aria-label="Увеличить количество ${e(item.product.name)}">+</button>` +
                             `</div>` +
                             `<strong>${money(item.subtotal)}</strong>` +
                             `<button type="button" class="icon-button remove-item" data-id="${item.id}" aria-label="Удалить ${e(item.product.name)}">${icon('trash')}</button>` +
                             `</article>`
-                    )
+                        );
+                    })
                     .join('')}</section>` +
                 `<aside class="panel order-summary">` +
                 `<div class="eyebrow">ПОЧТИ ВАШЕ</div>` +
@@ -320,8 +391,12 @@ export async function cartPage(view) {
                 `<div class="summary-total">` +
                 `<span>Итого</span>` +
                 `<strong>${money(cart.totalPrice)}</strong>` +
-                `</div>${unavailable ? '<p class="notice warning">В корзине есть недоступные товары. Удалите их, чтобы оформить заказ.</p>' : ''}<button type="button" class="button checkout" ${unavailable ? 'disabled' : ''}>Оформить заказ ${icon('arrow')}</button>` +
-                `<p class="fine-print">Заказ оформляется сразу, без онлайн-оплаты. Товары переместятся из корзины в ваши заказы.</p>` +
+                `</div>` +
+                (checkoutNotice ? `<p class="notice warning" role="status">${e(checkoutNotice)}</p>` : '') +
+                warnings.map((warning) => `<p class="notice warning">${e(warning)}</p>`).join('') +
+                `<button type="button" class="text-button refresh-stocks">Обновить остатки</button>` +
+                `<button type="button" class="button checkout" ${canCheckout ? '' : 'disabled'}>Оформить заказ ${icon('arrow')}</button>` +
+                `<p class="fine-print">Корзина не резервирует товар. Остатки проверяются при оформлении заказа.</p>` +
                 `</aside>` +
                 `</div>`;
             const mutate = (button, task) =>
@@ -365,6 +440,9 @@ export async function cartPage(view) {
                         await api('/cart/items', { method: 'DELETE' });
                 });
             const checkout = area.querySelector('.checkout');
+            area.querySelector('.refresh-stocks').onclick = () => {
+                if (!pending) load();
+            };
             checkout.onclick = () =>
                 perform(checkout, async () => {
                     if (pending) return;
@@ -382,6 +460,9 @@ export async function cartPage(view) {
                         notifyCart();
                         toast(`Заказ №${order.id} оформлен`);
                         location.hash = `/orders/${order.id}`;
+                    } catch (error) {
+                        if (error.status !== 409) throw error;
+                        await load('Заказ не оформлен. Корзина и остатки обновлены — проверьте количество.');
                     } finally {
                         pending = false;
                     }
@@ -429,11 +510,14 @@ export function bindOrderActions(container, admin, onChanged) {
                 perform(button, async () => {
                     const cancel = !!button.dataset.cancelOrder;
                     const id = button.dataset.cancelOrder || button.dataset.deliverOrder;
+                    const cancelDescription = admin
+                        ? 'Товары вернутся на склад и будут добавлены обратно в корзину покупателя.'
+                        : 'Товары вернутся на склад и будут добавлены обратно в вашу корзину. Корзина не резервирует остатки.';
                     if (
                         !(await confirmAction(
                             cancel ? 'Отменить заказ?' : 'Заказ доставлен?',
                             cancel
-                                ? 'Отмена необратима. Товары не вернутся в корзину автоматически.'
+                                ? cancelDescription
                                 : 'После этого отменить заказ будет нельзя.',
                             cancel ? 'Отменить заказ' : 'Подтвердить доставку',
                             cancel
@@ -443,7 +527,8 @@ export function bindOrderActions(container, admin, onChanged) {
                     await api(`${admin ? '/admin' : ''}/orders/${id}/${cancel ? 'cancel' : 'deliver'}`, {
                         method: 'POST'
                     });
-                    toast(cancel ? 'Заказ отменён' : 'Доставка подтверждена');
+                    if (cancel && !admin) notifyCart();
+                    toast(cancel ? 'Заказ отменён, товары возвращены на склад' : 'Доставка подтверждена');
                     await onChanged();
                 }))
     );
@@ -471,7 +556,9 @@ export async function ordersPage(view, id) {
         const ownRevision = ++revision;
         loading(area);
         try {
-            const page = pageData(await api(`/orders/${type}?${pageQuery(number, 'createdAt,desc')}`));
+            const query = pageQuery(number, 'createdAt,desc');
+            query.set('view', type.toUpperCase());
+            const page = pageData(await api(`/orders?${query}`));
             if (ownRevision !== revision) return;
             area.innerHTML = page.items.length
                 ? page.items.map((order) => orderMarkup(order)).join('')

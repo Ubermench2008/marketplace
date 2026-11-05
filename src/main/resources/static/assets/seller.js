@@ -50,6 +50,102 @@ function checkImage(file) {
         throw new Error(`«${file.name}»: выберите WEBP, JPEG или PNG.`);
 }
 
+const maxStockQuantity = 2147483647;
+
+async function loadStockEditor(panel, productId) {
+    const path = `/seller/products/${encodeURIComponent(productId)}/stock`;
+    loading(panel);
+    try {
+        const stock = await api(path);
+        if (!panel.isConnected) return;
+
+        panel.innerHTML =
+            '<div class="stock-editor-heading">' +
+            '<div><h2>Складской остаток</h2>' +
+            '<p class="fine-print">Оформление заказа уменьшает остаток, отмена возвращает товар на склад.</p></div>' +
+            `<p class="stock-editor-count" aria-live="polite"><strong class="stock-quantity">${e(stock.quantity)}</strong> шт.</p>` +
+            '</div><form class="stack-form">' +
+            '<div class="form-error" role="alert" tabindex="-1" hidden></div>' +
+            '<div class="form-columns">' +
+            '<label>Операция<select name="operation">' +
+            '<option value="add">Пополнить</option><option value="remove">Списать</option>' +
+            '</select></label>' +
+            '<label>Количество, шт.' +
+            `<input name="amount" type="number" min="1" max="${maxStockQuantity}" step="1" required>` +
+            '</label></div>' +
+            '<p class="fine-print stock-preview" aria-live="polite"></p>' +
+            '<div class="button-row"><button class="button small" type="submit">Пополнить</button>' +
+            '<button class="text-button refresh-stock" type="button">Обновить остаток</button></div>' +
+            '</form>';
+
+        const form = panel.querySelector('form');
+        const input = form.elements.amount;
+        const operation = form.elements.operation;
+        const submit = form.querySelector('[type="submit"]');
+        const refresh = form.querySelector('.refresh-stock');
+        const quantity = panel.querySelector('.stock-quantity');
+        const preview = form.querySelector('.stock-preview');
+        let currentQuantity = stock.quantity;
+
+        const deltaForInput = () => operation.value === 'remove' ? -input.valueAsNumber : input.valueAsNumber;
+        const updatePreview = () => {
+            submit.textContent = operation.value === 'remove' ? 'Списать' : 'Пополнить';
+            preview.textContent = '';
+            if (!input.value || !input.validity.valid) return;
+
+            const nextQuantity = currentQuantity + deltaForInput();
+            if (nextQuantity < 0) {
+                preview.textContent = 'По последним данным, столько товара на складе нет.';
+            } else if (nextQuantity > maxStockQuantity) {
+                preview.textContent = 'Превышен максимальный остаток.';
+            } else {
+                preview.textContent = `По текущим данным останется: ${nextQuantity} шт.`;
+            }
+        };
+
+        refresh.onclick = () => loadStockEditor(panel, productId);
+        operation.onchange = updatePreview;
+        input.oninput = updatePreview;
+
+        form.onsubmit = (event) => {
+            event.preventDefault();
+            perform(submit, async () => {
+                if (!form.reportValidity()) return;
+                const delta = deltaForInput();
+
+                form.querySelector('.form-error').hidden = true;
+                input.disabled = true;
+                operation.disabled = true;
+                refresh.disabled = true;
+                try {
+                    const updated = await api(path, { method: 'PATCH', body: { delta } });
+                    currentQuantity = updated.quantity;
+                    quantity.textContent = currentQuantity;
+                    input.value = '';
+                    updatePreview();
+                    toast('Остаток обновлён');
+                } catch (error) {
+                    if (error.status === 409 || error.status === 0) {
+                        submit.dataset.locked = 'true';
+                        const message = error.status === 409
+                            ? 'Не удалось применить изменение. Обновите остаток и проверьте количество.'
+                            : 'Связь прервалась. Обновите остаток перед повторной попыткой.';
+                        formError(form, new Error(message));
+                    } else {
+                        formError(form, error);
+                    }
+                } finally {
+                    input.disabled = false;
+                    operation.disabled = false;
+                    refresh.disabled = false;
+                }
+            });
+        };
+    } catch (error) {
+        if (panel.isConnected) showError(panel, error, () => loadStockEditor(panel, productId));
+    }
+}
+
 export async function productEditor(view, id) {
     const creating = id === 'new';
     let product = creating
@@ -99,6 +195,11 @@ export async function productEditor(view, id) {
         `<span class="field-hint">Латинские строчные буквы, цифры и дефисы.</span>` +
         `</label>` +
         `</div>` +
+        (creating
+            ? '<label>Начальный остаток, шт.' +
+              `<input name="initialQuantity" type="number" min="0" max="${maxStockQuantity}" step="1" value="0" required>` +
+              '<span class="field-hint">Укажите, сколько единиц уже есть на складе. Ноль допустим.</span></label>'
+            : '') +
         `<label>Описание<textarea name="description" rows="6" required minlength="50" maxlength="255" placeholder="Материалы, особенности и всё, что стоит знать покупателю. Минимум 50 символов.">${e(product.description)}</textarea>` +
         `<span class="field-hint">50–255 символов — ограничение текущей таблицы товара.</span>` +
         `</label>` +
@@ -136,6 +237,12 @@ export async function productEditor(view, id) {
         `</div>` +
         `</form>`;
     const form = view.querySelector('form');
+    if (!creating) {
+        const stockPanel = document.createElement('section');
+        stockPanel.className = 'panel form-panel stock-editor';
+        form.before(stockPanel);
+        loadStockEditor(stockPanel, id);
+    }
     const imagesArea = view.querySelector('.editor-images');
     const drawImages = () => {
         imagesArea.innerHTML = images.length
@@ -239,7 +346,10 @@ export async function productEditor(view, id) {
         !saved &&
         editable &&
         (creating
-            ? Object.values(values()).some((value) => value !== '' && value !== 0) || images.length || preview
+            ? Object.values(values()).some((value) => value !== '' && value !== 0) ||
+              form.elements.initialQuantity.value !== '0' ||
+              images.length ||
+              preview
             : dirty());
     view.beforeLeave = async () =>
         !unsaved() ||
@@ -292,7 +402,7 @@ export async function productEditor(view, id) {
                         const cancelling = action === 'cancel-moderation';
                         try {
                             await api(
-                                `/products/${id}/${cancelling ? 'moderation-requests/cancel' : action}`,
+                                `/products/${id}/${cancelling ? 'moderation-requests/current/cancel' : action}`,
                                 {
                                     method: 'POST'
                                 }
@@ -337,10 +447,14 @@ export async function productEditor(view, id) {
                     (control) => (control.disabled = true)
                 );
                 if (creating) {
+                    const productData = {
+                        ...values(),
+                        initialQuantity: form.elements.initialQuantity.valueAsNumber
+                    };
                     const body = new FormData();
                     body.append(
                         'product',
-                        new Blob([JSON.stringify(values())], { type: 'application/json' })
+                        new Blob([JSON.stringify(productData)], { type: 'application/json' })
                     );
                     body.append('previewImage', preview);
                     images.forEach((item) => body.append('detailsImages', item.file));
@@ -377,8 +491,8 @@ export async function productEditor(view, id) {
                     );
                     const imageIds = images.map((item) => item.uuid);
                     if (JSON.stringify(persisted.map((item) => item.uuid)) !== JSON.stringify(imageIds)) {
-                        await api(`/products/${id}/details-images/positions`, {
-                            method: 'PATCH',
+                        await api(`/products/${id}/details-images/order`, {
+                            method: 'PUT',
                             body: { imageIds }
                         });
                     }

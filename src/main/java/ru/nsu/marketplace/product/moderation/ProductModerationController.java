@@ -16,13 +16,13 @@ import ru.nsu.marketplace.product.moderation.dto.RejectProductModerationRequest;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/moderation")
+@RequestMapping("/api/admin/moderation/product-requests")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class ProductModerationController {
     private final ProductModerationService moderationService;
 
-    @GetMapping("/product-requests")
-    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping
     public Page<ProductModerationResponse> getRequestsByStatus(
             @RequestParam(name = "status", defaultValue = "PENDING") ModerationStatus moderationStatus,
             @PageableDefault(size = 20, sort = {"submittedAt", "id"}) Pageable pageable
@@ -30,14 +30,12 @@ public class ProductModerationController {
         return moderationService.getRequestsByStatus(moderationStatus, pageable);
     }
 
-    @GetMapping("/product-requests/{requestId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{requestId}")
     public ProductModerationResponse getRequest(@PathVariable UUID requestId) {
         return moderationService.getRequest(requestId);
     }
 
-    @PostMapping("/product-requests/{requestId}/approve")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{requestId}/approve")
     public ResponseEntity<Void> approveRequest(
             @PathVariable UUID requestId,
             @AuthenticationPrincipal Long moderatorId
@@ -46,8 +44,7 @@ public class ProductModerationController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/product-requests/{requestId}/reject")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{requestId}/reject")
     public ResponseEntity<Void> rejectRequest(
             @PathVariable UUID requestId,
             @AuthenticationPrincipal Long moderatorId,

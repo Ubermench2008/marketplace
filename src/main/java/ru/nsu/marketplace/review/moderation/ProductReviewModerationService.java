@@ -37,9 +37,9 @@ public class ProductReviewModerationService {
 
     @Transactional(readOnly = true)
     public ProductReviewModerationResponse getRequest(UUID requestId) {
-        return toResponse(reviewModerationRepository.findByPublicId(requestId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Review moderation request not found")
-        ));
+        ProductReviewModerationEntity request = reviewModerationRepository.findByPublicId(requestId)
+                .orElseThrow(() -> new ProductReviewNotFoundException("Review moderation request not found"));
+        return toResponse(request);
     }
 
     @Transactional

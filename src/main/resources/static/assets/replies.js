@@ -325,7 +325,7 @@ export async function replyModerationPage(view) {
             const query = pageQuery(number, 'createdAt,desc');
             query.append('sort', 'id,desc');
             query.set('status', status);
-            const page = pageData(await api(`/moderation/review-replies?${query}`));
+            const page = pageData(await api(`/admin/moderation/review-replies?${query}`));
             if (!view.isConnected || revision !== ownRevision) return;
             if (!page.items.length && number > 0) {
                 await load(number - 1);
@@ -354,7 +354,7 @@ export async function replyModerationPage(view) {
                 button.onclick = () =>
                     perform(button, async () => {
                         try {
-                            await api(`/moderation/review-replies/${reply.id}`, {
+                            await api(`/admin/moderation/review-replies/${reply.id}`, {
                                 method: 'PATCH',
                                 body: { status: status === 'PUBLISHED' ? 'HIDDEN' : 'PUBLISHED' }
                             });

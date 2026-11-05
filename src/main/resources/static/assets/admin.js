@@ -286,7 +286,7 @@ export async function moderationPage(view) {
         try {
             const page = pageData(
                 await api(
-                    `/moderation/product-requests?${pageQuery(number, 'submittedAt,asc')}&status=${status}`
+                    `/admin/moderation/product-requests?${pageQuery(number, 'submittedAt,asc')}&status=${status}`
                 )
             );
             if (ownRevision !== revision) return;
@@ -325,7 +325,7 @@ export async function moderationPage(view) {
 }
 
 export async function moderationDetails(view, id) {
-    const request = await api(`/moderation/product-requests/${encodeURIComponent(id)}`);
+    const request = await api(`/admin/moderation/product-requests/${encodeURIComponent(id)}`);
     if (!view.isConnected) return;
     document.title = `Заявка ${shortId(id)} — Рядом`;
     const snapshot = request.snapshot;
@@ -379,23 +379,33 @@ export async function moderationDetails(view, id) {
     view.insertAdjacentHTML('afterbegin', moderationNavigation());
     let reviewing = false;
     if (pending) {
+        const reviewProductRequest = async (action, reason) => {
+            const approving = action === 'approve';
+            const confirmed = await confirmAction(
+                approving ? 'Одобрить заявку?' : 'Отклонить заявку?',
+                approving
+                    ? 'Решение будет записано в историю. Публикация товара — отдельная операция.'
+                    : 'Причина будет сохранена вместе с решением по этой версии товара.',
+                approving ? 'Одобрить' : 'Отклонить',
+                !approving
+            );
+            if (!confirmed) return;
+
+            await api(`/admin/moderation/product-requests/${id}/${action}`, {
+                method: 'POST',
+                ...(approving ? {} : { body: { reason } })
+            });
+            toast(approving ? 'Заявка одобрена' : 'Заявка отклонена');
+            await moderationDetails(view, id);
+        };
+
         const approve = view.querySelector('.approve-request');
         approve.onclick = () =>
             perform(approve, async () => {
                 if (reviewing) return;
                 reviewing = true;
                 try {
-                    if (
-                        !(await confirmAction(
-                            'Одобрить заявку?',
-                            'Решение будет записано в историю. Публикация товара — отдельная операция.',
-                            'Одобрить'
-                        ))
-                    )
-                        return;
-                    await api(`/moderation/product-requests/${id}/approve`, { method: 'POST' });
-                    toast('Заявка одобрена');
-                    await moderationDetails(view, id);
+                    await reviewProductRequest('approve');
                 } finally {
                     reviewing = false;
                 }
@@ -412,21 +422,7 @@ export async function moderationDetails(view, id) {
                 }
                 reviewing = true;
                 try {
-                    if (
-                        !(await confirmAction(
-                            'Отклонить заявку?',
-                            'Причина будет сохранена вместе с решением по этой версии товара.',
-                            'Отклонить',
-                            true
-                        ))
-                    )
-                        return;
-                    await api(`/moderation/product-requests/${id}/reject`, {
-                        method: 'POST',
-                        body: { reason }
-                    });
-                    toast('Заявка отклонена');
-                    await moderationDetails(view, id);
+                    await reviewProductRequest('reject', reason);
                 } catch (error) {
                     formError(form, error);
                 } finally {

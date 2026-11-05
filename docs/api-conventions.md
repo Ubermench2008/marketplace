@@ -1,40 +1,136 @@
-# API conventions
+# Правила HTTP API маркетплейса
 
-Collection paths use plural resource names. A singleton belonging to the current
-user can be singular: `/api/cart`, `/reaction`, `/preview-image`.
+Этот файл — источник правил для новых и изменяемых маршрутов. Путь описывает
+ресурс и контекст работы с ним, а не имя Java-метода, таблицу или экран фронта.
 
-- GET reads data.
-- POST creates collection members or invokes business commands.
-- PATCH partially updates a resource.
-- PUT replaces a singleton, including the current user's reaction.
-- DELETE removes a resource or the current user's reaction.
-- Creation returns 201. A response representation returns 200. Successful changes
-  without a representation return 204.
+## 1. Ресурсы, URL и контроллеры
 
-## Updated contracts
+- Коллекции — существительные во множественном числе: `/products`, `/reviews`,
+  `/orders`. Одиночный ресурс без собственного ID — в единственном:
+  `/cart`, `/{productId}/stock`, `/{reviewId}/reaction`, `/preview-image`.
+  Составные сегменты пишем в kebab-case.
+- Вложенность показывает, **кто задаёт область запроса**. Отзывы конкретного
+  товара — `/products/{productId}/reviews`. Изменение уже известного отзыва —
+  `/reviews/{reviewId}`: для адресации не нужно повторять ID товара.
+- Пакетные данные нескольких владельцев живут рядом с их коллекцией:
+  `/products/stocks?productIds=...`. Публичный UUID товара используется и в
+  пути, и в параметрах, и в DTO остатка. Внутренний PK товара не публикуем
+  ради удобства реализации. Для заказов, отзывов, ответов и пользователей
+  сохраняем существующие числовые идентификаторы API.
+- Контроллер выбираем по ресурсу и контракту, не по числу сервисов или таблиц.
+  Публичная выборка остатков принадлежит `ProductController`, а операции
+  продавца над собственным остатком — `SellerController`. Оба могут
+  делегировать одному сервису. В `@RequestMapping` выносим общий префикс
+  контроллера, а в аннотациях методов оставляем относительные пути.
+- `/api/admin` — административные контракты: чужие корзины и заказы,
+  управление пользователями, модерация. `/api/seller` — выборки и операции
+  кабинета над своими ресурсами. Это **область контракта**, а не префикс
+  для каждого защищённого метода: редактирование самого товара по-прежнему
+  `PATCH /api/products/{productId}`. `/api/catalog` — публичное представление
+  каталога, а не второй ресурс для редактирования товара.
+- Фильтр, сортировка, страница и список ID передаются query-параметрами:
+  `?status=PENDING`, `?view=HISTORY`, `?productIds=uuid1&productIds=uuid2`.
+  Отдельный путь оправдан, когда это другой контракт выборки: плоская выдача
+  всей переписки и выдача одного уровня дерева сохраняются отдельно.
+- Имена параметров пути описывают ресурс: `{productId}`, `{reviewId}`.
+  Идентификатор текущего пользователя получаем из аутентификации, не из
+  тела или query. Сегмент `my` оставляем там, где он отличает собственную
+  запись или выборку от публичной.
 
-| Method | Path | Body / meaning |
+Почему так: один URL отвечает на вопрос «с чем работаем». Пакетная выдача
+не создаёт новый самостоятельный ресурс, а роль пользователя сама по себе
+не требует дублировать все операции над ресурсом.
+
+## 2. Методы и ответы
+
+| Метод | Когда используем | Пример |
 | --- | --- | --- |
-| GET | `/api/admin/users/{userId}/cart` | Administrative cart lookup |
-| POST | `/api/cart/items` | `{ "productId": "UUID" }`; add or increment; 204 |
-| PATCH | `/api/cart/items/{itemId}` | `{ "quantity": 2 }`; 204 |
-| POST | `/api/reviews/{reviewId}/replies` | `{ "text": "...", "replyToId": null }`; 201 |
-| PUT | `/api/reviews/{reviewId}/reaction` | `{ "type": "LIKE" }` or `DISLIKE`; 204 |
-| DELETE | `/api/reviews/{reviewId}/reaction` | 204 |
-| PUT | `/api/review-replies/{replyId}/reaction` | Same reaction body; 204 |
-| DELETE | `/api/review-replies/{replyId}/reaction` | 204 |
+| GET | Чтение без изменения состояния | `GET /api/products/stocks` |
+| POST | Создание в коллекции или явная бизнес-команда | `POST /api/products`, `POST /api/orders/{orderId}/cancel` |
+| PATCH | Частичное изменение полей или свойства состояния | `PATCH /api/products/{productId}` |
+| PUT | Полная замена представления одиночного ресурса | `PUT /api/products/{productId}/details-images/order` |
+| DELETE | Удаление ресурса или явно адресованного содержимого коллекции | `DELETE /api/cart/items` очищает позиции, но не корзину |
 
-Product and review moderation requests use `/api/moderation/product-requests`
-and `/api/moderation/review-requests`; each supports GET collection, GET by ID,
-POST `/{requestId}/approve`, POST `/{requestId}/reject`.
+Действия, запускающие переход бизнес-состояния, — `POST /{resourceId}/{action}`.
+Например, публикация товара, отмена заказа и рассмотрение заявки. Это не
+произвольный `PATCH status`: у перехода свои правила, права и побочные эффекты.
+Если команда адресует единственную текущую заявку, это видно в пути:
+`/moderation-requests/current/cancel`.
 
-Reply postmoderation uses GET `/api/moderation/review-replies?status=PUBLISHED`
-and PATCH `/api/moderation/review-replies/{reviewReplyId}` with
-`{ "status": "HIDDEN" }` or `PUBLISHED`.
+- `200` — чтение или успешная операция с возвращаемым представлением.
+- `201` — создание. Если у записи есть адрес для чтения в том же контексте,
+  добавляем `Location`. Массовое создание может вернуть массив новых записей.
+- `204` — успешное изменение без тела. Добавление в корзину может создать
+  позицию или увеличить количество существующей, поэтому это команда с `204`.
+  Установка реакции — замена своей реакции по известному адресу, тоже `204`.
+- `400` — невалидный запрос; `401` — нет корректной аутентификации;
+  `403` — роль или право не разрешают операцию; `404` — ресурс не найден
+  в доступной области; `409` — операция конфликтует с текущим состоянием.
+  Не превращаем ошибки клиента в `500`.
+- Ошибки контроллеров и аутентификации возвращают `ApiErrorResponse`
+  (`status`, `message`, `errors`, `timestamp`). Проверки доступа не выводят
+  токен или внутренние детали исключения.
+- Сообщения исключений, валидации и ошибок API пишем на английском.
+  Локализованные подсказки для пользователя формирует интерфейс.
+- Вход и выход — отдельные DTO, а не JPA-сущности. Списки с пагинацией
+  сериализуются как `{content, page}`; простой пакетный ответ — массив.
+  Пустая выборка — пустой массив или пустая страница, не `404`. Для остатков
+  `quantity: 0` означает известный ноль; отсутствие UUID в массиве не равно нулю.
+- Для JSON используем `@RequestBody`; для данных вместе с файлами — multipart
+  с именованными частями. Начальный остаток товара — `initialQuantity`
+  внутри JSON-части `product`, а не отдельный запрос создания остатка.
 
-Product `publish`, `withdraw`, `archive`, and order `cancel`, `deliver` commands
-use POST. Existing moderation submission and withdrawal commands remain POST.
-Catalog, seller selection, current orders and history remain separate views.
+Почему так: одинаковый HTTP-метод обещает одинаковый тип операции. Клиент
+может отличить пустую выдачу, ошибку запроса, конфликт и успешное изменение
+без тела, не угадывая смысл по тексту ответа.
 
-Removed paths have no compatibility aliases. Update external API clients together
-with the application. Security is enforced independently from path naming.
+## 3. Права доступа
+
+Публичные маршруты открываем в `SecurityConfig` по методу и пути. Права роли
+выражаем через `@PreAuthorize`: на классе, если правило едино для всех его
+методов, иначе на конкретном методе. Владение и допустимость действия
+проверяет бизнес-логика или запрос, ограниченный владельцем. Сам префикс
+`/admin` или `/seller` ничего не защищает. Админские и покупательские
+операции не взаимозаменяемы.
+
+## 4. Карта текущих маршрутов
+
+В таблице опущен общий префикс `/api`. Файлы изображений раздаются отдельно
+через `GET /media/**`.
+
+| Область | Маршрут и методы |
+| --- | --- |
+| Вход и регистрация | `POST /auth/login`, `POST /auth/register` |
+| Каталог | `GET /catalog/products` |
+| Товар | `POST /products`, `GET, PATCH /products/{productId}` |
+| Публичные остатки | `GET /products/stocks?productIds=...` — только активные товары |
+| Кабинет продавца | `GET /seller/products`, `GET, PATCH /seller/products/{productId}/stock` — остаток собственного товара |
+| Изображения | `GET, POST /products/{productId}/details-images`, `PUT .../details-images/order`, `DELETE .../details-images/{imageId}`, `PUT .../preview-image` |
+| Статус товара | `POST /products/{productId}/publish`, `.../withdraw`, `.../archive` |
+| Заявка продавца | `POST /products/{productId}/moderation-requests`, `POST .../moderation-requests/current/cancel` |
+| Корзина | `GET /cart`, `POST, DELETE /cart/items`, `PATCH, DELETE /cart/items/{itemId}` |
+| Заказы покупателя | `GET /orders?view=CURRENT\|HISTORY` (по умолчанию `CURRENT`), `POST /orders`, `GET /orders/{orderId}`, `POST .../cancel` |
+| Пользователи | `GET, POST /admin/users`, `GET, PATCH, DELETE /admin/users/{userId}` |
+| Корзины и заказы в админке | `GET /admin/users/{userId}/cart`, `GET /admin/users/{userId}/orders`, `GET /admin/orders/{orderId}`, `POST .../cancel`, `POST .../deliver` |
+| Отзывы | `GET, POST /products/{productId}/reviews`, `GET .../reviews/my`, `PATCH, DELETE /reviews/{reviewId}` |
+| Ответы | `GET, POST /reviews/{reviewId}/replies`, `GET .../replies/children?parentId=...` (без родителя — корни) |
+| Реакции | `PUT, DELETE /reviews/{reviewId}/reaction`, `PUT, DELETE /review-replies/{replyId}/reaction`, `GET /reviews/reactions/my?reviewIds=...` |
+| Очереди модерации | `GET /admin/moderation/product-requests` и `/admin/moderation/review-requests`, `GET .../{requestId}`, `POST .../{requestId}/approve` и `.../reject` |
+| Модерация ответов | `GET /admin/moderation/review-replies?status=...`, `PATCH .../{reviewReplyId}` с новым статусом |
+
+Корректировка остатка принимает `{"delta": 5}` для пополнения или
+`{"delta": -2}` для списания и возвращает `200` с новым количеством.
+Нулевое изменение — `400`, отрицательный или выходящий за пределы
+допустимого результат — `409`. Повторный `PATCH` применит изменение ещё раз;
+после обрыва связи сначала перечитываем остаток.
+
+## 5. Проверка при изменении контракта
+
+1. Сначала выбери ресурс, контекст доступа и HTTP-метод по правилам выше.
+2. Обнови контроллер, правила доступа, вызовы фронта, контрактные тесты и карту
+   в этом файле в одном изменении. Маршруты интерфейса `#/...` не являются API.
+3. Для нового пути проверь успешный вызов, невалидные параметры и права.
+   При замене маршрута проверь, что старый mapping не зарегистрирован.
+4. В этом проекте старые пути не оставляем как скрытые алиасы. Если есть
+   внешний клиент, использующий изменяемый путь, обновляем его одновременно
+   или заранее согласовываем отдельный период совместимости.

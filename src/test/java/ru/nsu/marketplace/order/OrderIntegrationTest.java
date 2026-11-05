@@ -105,6 +105,7 @@ public class OrderIntegrationTest {
         assertThat(order.items().getFirst().quantity()).isEqualTo(2);
         assertThat(order.items().getFirst().unitPrice()).isEqualByComparingTo("19.90");
         assertThat(itemsCount(cart.getId())).isZero();
+        assertThat(stockQuantity(productId)).isEqualTo(8);
         assertThat(cartRepository.findById(cart.getId())).isPresent();
         assertThat(jdbcTemplate.queryForObject("select count(*) from order_items where order_id = ?",
                 Long.class, order.id())).isEqualTo(1L);
@@ -130,6 +131,7 @@ public class OrderIntegrationTest {
     void shouldMoveCancelledOrderToHistoryAndProtectItFromOtherUsers() throws Exception {
         CartEntity cart = cart();
         Long userId = cart.getUser().getId();
+        Long productId = cart.getItems().getFirst().getProduct().getId();
         Long otherUserId = user(Role.BUYER).getId();
         OrderResponse order = createOrder(userId);
 
@@ -140,12 +142,15 @@ public class OrderIntegrationTest {
 
         mockMvc.perform(post("/api/orders/{orderId}/cancel", order.id()).with(authenticated(userId, Role.BUYER)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
-        mockMvc.perform(get("/api/orders/current").with(authenticated(userId, Role.BUYER)))
+        mockMvc.perform(post("/api/orders/{orderId}/cancel", order.id()).with(authenticated(userId, Role.BUYER)))
+                .andExpect(status().isConflict());
+        mockMvc.perform(get("/api/orders").param("view", "CURRENT").with(authenticated(userId, Role.BUYER)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content").isEmpty());
-        mockMvc.perform(get("/api/orders/history").with(authenticated(userId, Role.BUYER)))
+        mockMvc.perform(get("/api/orders").param("view", "HISTORY").with(authenticated(userId, Role.BUYER)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(order.id()))
                 .andExpect(jsonPath("$.content[0].status").value("CANCELLED"));
-        assertThat(itemsCount(cart.getId())).isZero();
+        assertThat(itemsCount(cart.getId())).isEqualTo(1L);
+        assertThat(stockQuantity(productId)).isEqualTo(10);
     }
 
     @Test
@@ -180,9 +185,9 @@ public class OrderIntegrationTest {
                 .andExpect(status().isConflict());
         mockMvc.perform(post("/api/admin/orders/{orderId}/cancel", secondOrder.id()).with(authenticated(adminId, Role.ADMIN)))
                 .andExpect(status().isConflict());
-        mockMvc.perform(get("/api/orders/current").with(authenticated(userId, Role.BUYER)))
+        mockMvc.perform(get("/api/orders").param("view", "CURRENT").with(authenticated(userId, Role.BUYER)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content").isEmpty());
-        mockMvc.perform(get("/api/orders/history").with(authenticated(userId, Role.BUYER)))
+        mockMvc.perform(get("/api/orders").param("view", "HISTORY").with(authenticated(userId, Role.BUYER)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].status").value("DELIVERED"));
     }
 
@@ -190,6 +195,7 @@ public class OrderIntegrationTest {
     void shouldRollbackPersistedOrderAndKeepCartWhenCheckoutFails() {
         CartEntity cart = cart();
         Long userId = cart.getUser().getId();
+        Long productId = cart.getItems().getFirst().getProduct().getId();
         doAnswer(invocation -> {
             OrderEntity order = invocation.getArgument(0);
             // Execute real persistence before failing the enclosing service transaction.
@@ -203,6 +209,7 @@ public class OrderIntegrationTest {
         assertThat(jdbcTemplate.queryForObject("select count(*) from orders where user_id = ?",
                 Long.class, userId)).isZero();
         assertThat(itemsCount(cart.getId())).isEqualTo(1L);
+        assertThat(stockQuantity(productId)).isEqualTo(10);
     }
 
     @Test
@@ -251,6 +258,7 @@ public class OrderIntegrationTest {
                 .price(new BigDecimal("19.90"))
                 .seller(seller)
                 .build());
+        jdbcTemplate.update("insert into product_stocks (product_id, quantity) values (?, ?)", product.getId(), 10);
         CartEntity cart = new CartEntity();
         cart.setUser(buyer);
         CartItemEntity item = new CartItemEntity();
@@ -272,6 +280,11 @@ public class OrderIntegrationTest {
 
     private Long itemsCount(Long cartId) {
         return jdbcTemplate.queryForObject("select count(*) from cart_items where cart_id = ?", Long.class, cartId);
+    }
+
+    private Integer stockQuantity(Long productId) {
+        return jdbcTemplate.queryForObject("select quantity from product_stocks where product_id = ?",
+                Integer.class, productId);
     }
 
     private RequestPostProcessor authenticated(Long userId, Role role) {

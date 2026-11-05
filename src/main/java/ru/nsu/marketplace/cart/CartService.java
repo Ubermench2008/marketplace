@@ -7,6 +7,7 @@ import ru.nsu.marketplace.cart.dto.CartItemResponse;
 import ru.nsu.marketplace.cart.dto.CartResponse;
 import ru.nsu.marketplace.cart.exception.CartItemNotFoundException;
 import ru.nsu.marketplace.cart.exception.CartNotFoundException;
+import ru.nsu.marketplace.order.OrderItemEntity;
 import ru.nsu.marketplace.product.ProductCardRepository;
 import ru.nsu.marketplace.product.ProductRepository;
 import ru.nsu.marketplace.product.ProductService;
@@ -42,9 +43,7 @@ public class CartService {
                 () -> new ProductNotFoundException("Product is missing: product=" + productId)
         );
 
-        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
-                () -> new CartNotFoundException("User cart is missing: userId=" + userId)
-        );
+        CartEntity cart = findCartForUpdate(userId);
 
         Optional<CartItemEntity> existingItem = cart.getItems().stream()
                 .filter(item -> item.getProduct().getPublicId().equals(productId))
@@ -65,23 +64,16 @@ public class CartService {
 
     @Transactional
     public void clearCart(Long userId) {
-        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
-                () -> new CartNotFoundException("User cart is missing: userId=" + userId)
-        );
+        CartEntity cart = findCartForUpdate(userId);
 
         cart.getItems().clear();
     }
 
     @Transactional
     public void deleteCartItem(Long userId, Long itemId) {
-        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
-                () -> new CartNotFoundException("User cart is missing: userId=" + userId)
-        );
+        CartEntity cart = findCartForUpdate(userId);
 
-        CartItemEntity cartItem = cart.getItems().stream()
-                .filter(item -> item.getId().equals(itemId))
-                .findFirst()
-                .orElseThrow(() -> new CartItemNotFoundException("Cart item not found: itemId=" + itemId));
+        CartItemEntity cartItem = findCartItem(cart, itemId);
 
         cart.getItems().remove(cartItem);
     }
@@ -92,16 +84,51 @@ public class CartService {
             throw new IllegalArgumentException("Quantity must be at least 1");
         }
 
-        CartEntity cart = cartRepository.findByUserIdForUpdate(userId).orElseThrow(
+        CartEntity cart = findCartForUpdate(userId);
+
+        CartItemEntity cartItem = findCartItem(cart, itemId);
+
+        cartItem.setQuantity(quantity);
+    }
+
+    private CartEntity findCartForUpdate(Long userId) {
+        return cartRepository.findByUserIdForUpdate(userId).orElseThrow(
                 () -> new CartNotFoundException("User cart is missing: userId=" + userId)
         );
+    }
 
-        CartItemEntity cartItem = cart.getItems().stream()
+    private CartItemEntity findCartItem(CartEntity cart, Long itemId) {
+        return cart.getItems().stream()
                 .filter(item -> item.getId().equals(itemId))
                 .findFirst()
                 .orElseThrow(() -> new CartItemNotFoundException("Cart item not found: itemId=" + itemId));
+    }
 
-        cartItem.setQuantity(quantity);
+    @Transactional
+    public void restoreUserCartFromItems(List<OrderItemEntity> items, Long userId) {
+        CartEntity cart = findCartForUpdate(userId);
+
+        for (OrderItemEntity orderItem : items) {
+            UUID productId = orderItem.getProduct().getPublicId();
+            Optional<CartItemEntity> existingItem = cart.getItems().stream()
+                    .filter(item -> item.getProduct().getPublicId().equals(productId))
+                    .findFirst();
+
+            if (existingItem.isPresent()) {
+                CartItemEntity cartItem = existingItem.get();
+                cartItem.setQuantity(cartItem.getQuantity() + orderItem.getQuantity());
+            } else {
+                cart.getItems().add(toCartItem(orderItem, cart));
+            }
+        }
+    }
+
+    private CartItemEntity toCartItem(OrderItemEntity orderItem, CartEntity cart) {
+        CartItemEntity cartItem = new CartItemEntity();
+        cartItem.setCart(cart);
+        cartItem.setProduct(orderItem.getProduct());
+        cartItem.setQuantity(orderItem.getQuantity());
+        return cartItem;
     }
 
     public CartResponse toResponse(CartEntity cart) {

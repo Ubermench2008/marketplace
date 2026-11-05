@@ -67,7 +67,7 @@ export async function reviewModerationPage(view) {
             const query = pageQuery(number, 'submittedAt,asc');
             query.append('sort', 'id,asc');
             query.set('status', status);
-            const page = pageData(await api(`/moderation/review-requests?${query}`));
+            const page = pageData(await api(`/admin/moderation/review-requests?${query}`));
             if (!view.isConnected || ownRevision !== revision) return;
             area.innerHTML = page.items.length
                 ? `<div class="moderation-list">${page.items
@@ -93,7 +93,7 @@ export async function reviewModerationPage(view) {
 }
 
 export async function reviewModerationDetails(view, id) {
-    const request = await api(`/moderation/review-requests/${encodeURIComponent(id)}`);
+    const request = await api(`/admin/moderation/review-requests/${encodeURIComponent(id)}`);
     if (!view.isConnected) return;
     document.title = `Модерация отзыва ${shortId(id)} — Рядом`;
     const pending = request.status === 'PENDING';
@@ -166,7 +166,7 @@ export async function reviewModerationDetails(view, id) {
                 ))
             )
                 return;
-            await api(`/moderation/review-requests/${encodeURIComponent(id)}/${action}`, {
+            await api(`/admin/moderation/review-requests/${encodeURIComponent(id)}/${action}`, {
                 method: 'POST',
                 body: { reviewVersion: request.reviewVersion, ...(approving ? {} : { reason }) }
             });

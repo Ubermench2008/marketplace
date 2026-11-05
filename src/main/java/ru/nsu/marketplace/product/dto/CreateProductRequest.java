@@ -28,5 +28,9 @@ public record CreateProductRequest(
         @NotNull(message = "Price is required")
         @DecimalMin(value = "0.01", message = "Price must be greater than zero")
         @Digits(integer = 9, fraction = 2)
-        BigDecimal price
+        BigDecimal price,
+
+        @NotNull(message = "Initial quantity is required")
+        @PositiveOrZero(message = "Initial quantity must be zero or greater")
+        Integer initialQuantity
 ) {}

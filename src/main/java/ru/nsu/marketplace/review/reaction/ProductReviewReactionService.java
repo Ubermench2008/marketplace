@@ -42,13 +42,8 @@ public class ProductReviewReactionService {
 
     @Transactional
     public void setReaction(Long reviewId, Long userId, ReactionType type) {
-        UserEntity user = userRepository.findById(userId).orElseThrow(
-                () -> new UserNotFoundException("User not found")
-        );
-
-        ProductReviewEntity review = reviewRepository.findByIdForUpdate(reviewId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Product review not found")
-        );
+        UserEntity user = findUser(userId);
+        ProductReviewEntity review = findReviewForUpdate(reviewId);
 
         if (review.getDeletedAt() != null || review.getModerationStatus() != ModerationStatus.APPROVED) {
             throw new ProductReviewStateException("Review must be APPROVED and exists for set reaction");
@@ -83,13 +78,8 @@ public class ProductReviewReactionService {
 
     @Transactional
     public void deleteReaction(Long reviewId, Long userId) {
-        UserEntity user = userRepository.findById(userId).orElseThrow(
-                () -> new UserNotFoundException("User not found")
-        );
-
-        ProductReviewEntity review = reviewRepository.findByIdForUpdate(reviewId).orElseThrow(
-                () -> new ProductReviewNotFoundException("Product review not found")
-        );
+        findUser(userId);
+        findReviewForUpdate(reviewId);
 
         Optional<ProductReviewReactionEntity> reactionEntityOptional = reviewReactionRepository
                 .findByReview_IdAndUser_Id(reviewId, userId);
@@ -99,5 +89,15 @@ public class ProductReviewReactionService {
         }
 
         reviewReactionRepository.delete(reactionEntityOptional.get());
+    }
+
+    private UserEntity findUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    }
+
+    private ProductReviewEntity findReviewForUpdate(Long reviewId) {
+        return reviewRepository.findByIdForUpdate(reviewId)
+                .orElseThrow(() -> new ProductReviewNotFoundException("Product review not found"));
     }
 }

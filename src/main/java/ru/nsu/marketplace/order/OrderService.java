@@ -8,17 +8,21 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.marketplace.cart.CartEntity;
 import ru.nsu.marketplace.cart.CartItemEntity;
 import ru.nsu.marketplace.cart.CartRepository;
+import ru.nsu.marketplace.cart.CartService;
 import ru.nsu.marketplace.cart.exception.CartNotFoundException;
 import ru.nsu.marketplace.order.dto.OrderItemResponse;
 import ru.nsu.marketplace.order.dto.OrderResponse;
 import ru.nsu.marketplace.order.exception.OrderNotFoundException;
 import ru.nsu.marketplace.order.exception.OrderStateException;
 import ru.nsu.marketplace.product.model.ProductEntity;
+import ru.nsu.marketplace.product.stock.ProductStockEntity;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 import ru.nsu.marketplace.user.UserRepository;
 import ru.nsu.marketplace.user.exception.UserNotFoundException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -27,6 +31,8 @@ public class OrderService {
     private final CartRepository cartRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final CartService cartService;
+    private final ProductStockService stockService;
 
     @Transactional
     public OrderResponse createOrder(Long userId) {
@@ -38,22 +44,16 @@ public class OrderService {
             throw new OrderStateException("Cannot create an order from an empty cart");
         }
 
+        deductStockForCart(cart);
+
         OrderEntity order = OrderEntity.builder().user(cart.getUser()).build();
         BigDecimal totalPrice = BigDecimal.ZERO;
 
         for (CartItemEntity cartItem : cart.getItems()) {
-            ProductEntity product = cartItem.getProduct();
-            BigDecimal unitPrice = product.getPrice();
-            int quantity = cartItem.getQuantity();
-
-            OrderItemEntity orderItem = OrderItemEntity.builder()
-                    .order(order)
-                    .product(product)
-                    .quantity(quantity)
-                    .unitPrice(unitPrice)
-                    .build();
+            OrderItemEntity orderItem = toOrderItem(cartItem, order);
             order.getItems().add(orderItem);
-            totalPrice = totalPrice.add(unitPrice.multiply(BigDecimal.valueOf(quantity)));
+            BigDecimal subtotal = orderItem.getUnitPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity()));
+            totalPrice = totalPrice.add(subtotal);
         }
 
         order.setTotalPrice(totalPrice);
@@ -61,6 +61,39 @@ public class OrderService {
         cart.getItems().clear();
 
         return toResponse(savedOrder);
+    }
+
+    private void deductStockForCart(CartEntity cart) {
+        List<CartItemEntity> itemsSortedByProductId = cart.getItems().stream()
+            .sorted(Comparator.comparingLong(item -> item.getProduct().getId()))
+            .toList();
+
+        for (CartItemEntity cartItem : itemsSortedByProductId) {
+            ProductEntity product = cartItem.getProduct();
+            ProductStockEntity stockEntity = stockService.getProductStockEntityForUpdate(product.getId());
+            int requestedQuantity = cartItem.getQuantity();
+            int availableQuantity = stockEntity.getQuantity();
+
+            if (requestedQuantity > availableQuantity) {
+                throw new OrderStateException(
+                        "Insufficient stock for product: productId=" + product.getPublicId()
+                                + ", requestedQuantity=" + requestedQuantity
+                                + ", availableQuantity=" + availableQuantity
+                );
+            }
+
+            stockEntity.setQuantity(availableQuantity - requestedQuantity);
+        }
+    }
+
+    private OrderItemEntity toOrderItem(CartItemEntity cartItem, OrderEntity order) {
+        ProductEntity product = cartItem.getProduct();
+        return OrderItemEntity.builder()
+                .order(order)
+                .product(product)
+                .quantity(cartItem.getQuantity())
+                .unitPrice(product.getPrice())
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -86,9 +119,7 @@ public class OrderService {
 
     @Transactional
     public OrderResponse cancelUserOrder(Long userId, Long orderId) {
-        OrderEntity order = orderRepository.findUserOrderForUpdate(orderId, userId).orElseThrow(
-                () -> new OrderNotFoundException("Order not found: orderId=" + orderId)
-        );
+        OrderEntity order = findUserOrderForUpdate(userId, orderId);
         return cancelOrder(order);
     }
 
@@ -102,14 +133,16 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public OrderResponse getOrder(Long orderId) {
-        return toResponse(orderRepository.findById(orderId).orElseThrow(
+        OrderEntity order = orderRepository.findById(orderId).orElseThrow(
                 () -> new OrderNotFoundException("Order not found: orderId=" + orderId)
-        ));
+        );
+        return toResponse(order);
     }
 
     @Transactional
     public OrderResponse cancelOrderByAdmin(Long orderId) {
-        return cancelOrder(findOrderForUpdate(orderId));
+        OrderEntity order = findOrderForUpdate(orderId);
+        return cancelOrder(order);
     }
 
     @Transactional
@@ -125,6 +158,12 @@ public class OrderService {
         return toResponse(order);
     }
 
+    private OrderEntity findUserOrderForUpdate(Long userId, Long orderId) {
+        return orderRepository.findUserOrderForUpdate(orderId, userId).orElseThrow(
+                () -> new OrderNotFoundException("Order not found: orderId=" + orderId)
+        );
+    }
+
     private OrderEntity findOrderForUpdate(Long orderId) {
         return orderRepository.findOrderForUpdate(orderId).orElseThrow(
                 () -> new OrderNotFoundException("Order not found: orderId=" + orderId)
@@ -135,8 +174,35 @@ public class OrderService {
         if (order.getStatus() == OrderStatus.DELIVERED) {
             throw new OrderStateException("A delivered order cannot be cancelled");
         }
+
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            throw new OrderStateException("An already cancelled order cannot be cancelled again");
+        }
+
+        cartService.restoreUserCartFromItems(order.getItems(), order.getUser().getId());
+        restoreStockForOrder(order);
+
         order.setStatus(OrderStatus.CANCELLED);
         return toResponse(order);
+    }
+
+    private void restoreStockForOrder(OrderEntity order) {
+        List<OrderItemEntity> itemsSortedByProductId = order.getItems().stream()
+                .sorted(Comparator.comparingLong(item -> item.getProduct().getId()))
+                .toList();
+
+        for (OrderItemEntity orderItem : itemsSortedByProductId) {
+            ProductEntity product = orderItem.getProduct();
+            ProductStockEntity stock = stockService.getProductStockEntityForUpdate(product.getId());
+            long quantity = (long) stock.getQuantity() + orderItem.getQuantity();
+
+            if (quantity > Integer.MAX_VALUE) {
+                throw new OrderStateException("Stock return exceeds maximum quantity: productId="
+                        + product.getPublicId());
+            }
+
+            stock.setQuantity((int) quantity);
+        }
     }
 
     private OrderResponse toResponse(OrderEntity order) {

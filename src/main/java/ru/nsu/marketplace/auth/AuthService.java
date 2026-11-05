@@ -36,11 +36,11 @@ public class AuthService {
         String email = request.email();
 
         if (userRepository.existsByTelephoneNumber(phoneNumber)) {
-            throw new TelephoneAlreadyExistsException("Номер телефона уже зарегистрирован");
+            throw new TelephoneAlreadyExistsException("Telephone number is already registered");
         }
 
         if (email != null && userRepository.existsByEmail(email)) {
-            throw new EmailAlreadyExistsException("Email уже зарегистрирован");
+            throw new EmailAlreadyExistsException("Email is already registered");
         }
 
         String passwordHash = passwordEncoder.encode(request.password());
@@ -77,20 +77,20 @@ public class AuthService {
             try {
                 telephone = phoneNumberService.normalize(login);
             } catch (InvalidPhoneNumberException exception) {
-                throw new InvalidCredentialsException("Неверный логин или пароль");
+                throw new InvalidCredentialsException("Invalid login or password");
             }
 
             user = userRepository.findByTelephoneNumber(telephone);
         }
 
         UserEntity foundUser = user.orElseThrow(
-                () -> new InvalidCredentialsException("Неверный логин или пароль")
+                () -> new InvalidCredentialsException("Invalid login or password")
         );
 
         if (!passwordEncoder.matches(password, foundUser.getPasswordHash())) {
             log.warn("Login failed: incorrect password for userId={}", foundUser.getId());
 
-            throw new InvalidCredentialsException("Неверный логин или пароль");
+            throw new InvalidCredentialsException("Invalid login or password");
         }
 
         log.info("User successfully authenticated: user={}", foundUser.getId());

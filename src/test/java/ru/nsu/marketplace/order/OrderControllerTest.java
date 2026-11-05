@@ -68,7 +68,7 @@ public class OrderControllerTest {
 
         mockMvc
             .perform(
-                get("/api/orders/current")
+                get("/api/orders").param("view", "CURRENT")
                     .with(authenticated(Role.BUYER))
                     .param("page", "1")
                     .param("size", "5")
@@ -91,7 +91,7 @@ public class OrderControllerTest {
         when(service.getOrderHistory(eq(10L), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
 
         mockMvc
-            .perform(get("/api/orders/history").with(authenticated(Role.BUYER)))
+            .perform(get("/api/orders").param("view", "HISTORY").with(authenticated(Role.BUYER)))
             .andExpect(status().isOk());
 
         verify(service).getOrderHistory(eq(10L), any(Pageable.class));
@@ -197,8 +197,8 @@ public class OrderControllerTest {
     private MockHttpServletRequestBuilder customerRequest(String operation) {
         return switch (operation) {
             case "create" -> post("/api/orders");
-            case "current" -> get("/api/orders/current");
-            case "history" -> get("/api/orders/history");
+            case "current" -> get("/api/orders").param("view", "CURRENT");
+            case "history" -> get("/api/orders").param("view", "HISTORY");
             case "details" -> get("/api/orders/1");
             case "cancel" -> post("/api/orders/1/cancel");
             default -> throw new IllegalArgumentException(operation);

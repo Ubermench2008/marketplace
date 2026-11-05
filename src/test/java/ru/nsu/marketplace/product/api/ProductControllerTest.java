@@ -31,6 +31,8 @@ import ru.nsu.marketplace.product.dto.UpdateProductImageOrderRequest;
 import ru.nsu.marketplace.product.dto.UpdateProductRequest;
 import ru.nsu.marketplace.product.exception.ProductNotFoundException;
 import ru.nsu.marketplace.product.model.ProductStatus;
+import ru.nsu.marketplace.product.stock.ProductStockResponse;
+import ru.nsu.marketplace.product.stock.ProductStockService;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +41,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -46,6 +49,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -62,6 +66,9 @@ public class ProductControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private ProductStockService productStockService;
 
     @Autowired
     private WebApplicationContext context;
@@ -82,6 +89,31 @@ public class ProductControllerTest {
                 )
             )
             .build();
+    }
+
+    @Test
+    void shouldAllowAnonymousStockLookup() throws Exception {
+        UUID productId = UUID.randomUUID();
+        when(productStockService.getProductStocks(List.of(productId)))
+                .thenReturn(List.of(new ProductStockResponse(productId, 0)));
+
+        mockMvc.perform(get("/api/products/stocks")
+                        .param("productIds", productId.toString())
+                        .with(anonymous()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].productId").value(productId.toString()))
+                .andExpect(jsonPath("$[0].quantity").value(0));
+    }
+
+    @Test
+    void shouldRejectInvalidProductIdInStockLookup() throws Exception {
+        mockMvc.perform(get("/api/products/stocks")
+                        .param("productIds", "not-a-uuid")
+                        .with(anonymous()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+
+        verifyNoInteractions(productStockService);
     }
 
     @Test
@@ -110,7 +142,8 @@ public class ProductControllerTest {
                           "slug": "iphone-16-pro",
                           "name": "iphone 16 pro",
                           "description": "A sufficiently long product description for tests.",
-                          "price": 99990.00
+                          "price": 99990.00,
+                          "initialQuantity": 0
                         }
                         """
                 )
@@ -131,7 +164,8 @@ public class ProductControllerTest {
                               "slug": "iphone-16-pro",
                               "name": "",
                               "description": "A sufficiently long product description for tests.",
-                              "price": 99990.00
+                              "price": 99990.00,
+                              "initialQuantity": 0
                             }
                             """
                 )
@@ -151,7 +185,8 @@ public class ProductControllerTest {
                               "slug": "iphone-16-pro",
                               "name": "iphone 16 pro",
                               "description": "A sufficiently long product description for tests.",
-                              "price": -99990.00
+                              "price": -99990.00,
+                              "initialQuantity": 0
                             }
                             """
                 )
@@ -170,7 +205,8 @@ public class ProductControllerTest {
                             {
                               "name": "iphone 16 pro",
                               "description": "A sufficiently long product description for tests.",
-                              "price": -99990.00
+                              "price": -99990.00,
+                              "initialQuantity": 0
                             }
                             """
                 )
@@ -311,7 +347,7 @@ public class ProductControllerTest {
 
         mockMvc
             .perform(
-                patch("/api/products/{id}/details-images/positions", productId)
+                put("/api/products/{id}/details-images/order", productId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(
                         """

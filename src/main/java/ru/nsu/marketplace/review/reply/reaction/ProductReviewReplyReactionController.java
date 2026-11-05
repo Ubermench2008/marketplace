@@ -11,14 +11,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import jakarta.validation.Valid;
 import ru.nsu.marketplace.review.reaction.SetReactionRequest;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 @RestController
+@RequestMapping("/api/review-replies/{replyId}/reaction")
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('BUYER', 'SELLER') and !hasRole('ADMIN')")
 public class ProductReviewReplyReactionController {
     private final ProductReviewReplyReactionService service;
 
-    @PutMapping("/api/review-replies/{replyId}/reaction")
+    @PutMapping
     public ResponseEntity<Void> setReaction(
             @PathVariable Long replyId,
             @AuthenticationPrincipal Long userId,
@@ -28,7 +30,7 @@ public class ProductReviewReplyReactionController {
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping("/api/review-replies/{replyId}/reaction")
+    @DeleteMapping
     public ResponseEntity<Void> deleteReaction(
             @PathVariable Long replyId,
             @AuthenticationPrincipal Long userId
