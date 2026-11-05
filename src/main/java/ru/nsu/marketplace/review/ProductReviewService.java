@@ -31,6 +31,8 @@ import ru.nsu.marketplace.review.reaction.ReviewReactionCountsByReview;
 import ru.nsu.marketplace.review.reply.ProductReviewReplyEntity;
 import ru.nsu.marketplace.review.reply.ProductReviewReplyRepository;
 import ru.nsu.marketplace.review.reply.ReplyStatus;
+import ru.nsu.marketplace.review.reply.DirectReplyCount;
+import ru.nsu.marketplace.review.reply.ReviewReplyCount;
 import ru.nsu.marketplace.review.reply.reaction.ProductReviewReplyReactionRepository;
 import ru.nsu.marketplace.review.reply.reaction.ReplyReactionCounts;
 import ru.nsu.marketplace.user.UserEntity;
@@ -66,7 +68,6 @@ public class ProductReviewService {
         ProductReviewEntity review = reviewRepository.findById(reviewId).orElseThrow(
                 () -> new ProductReviewNotFoundException("Review not found")
         );
-        ensureReviewNotDeleted(review);
         if (review.getModerationStatus() != ModerationStatus.APPROVED) {
             throw new ProductReviewNotFoundException("Review not found");
         }
@@ -78,8 +79,50 @@ public class ProductReviewService {
                 likesOrderedPage
         );
 
+        return toReplyResponsePage(replies, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductReviewReplyResponse> getDirectReplies(
+            Long reviewId,
+            Long parentId,
+            Pageable pageable,
+            Long userId
+    ) {
+        ProductReviewEntity review = reviewRepository.findById(reviewId).orElseThrow(
+                () -> new ProductReviewNotFoundException("Review not found")
+        );
+        if (review.getModerationStatus() != ModerationStatus.APPROVED) {
+            throw new ProductReviewNotFoundException("Review not found");
+        }
+
+        if (parentId != null) {
+            ProductReviewReplyEntity parent = reviewReplyRepository.findById(parentId).orElseThrow(
+                    () -> new ReviewReplyNotFoundException("Review reply not found")
+            );
+            if (!Objects.equals(parent.getReview().getId(), reviewId)) {
+                throw new ReviewReplyNotFoundException("Review reply not found");
+            }
+        }
+
+        Pageable likesOrderedPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        Page<ProductReviewReplyEntity> replies = reviewReplyRepository.findVisibleDirectReplies(
+                reviewId,
+                parentId,
+                ReplyStatus.PUBLISHED,
+                ReactionType.LIKE,
+                likesOrderedPage
+        );
+
+        return toReplyResponsePage(replies, userId);
+    }
+
+    private Page<ProductReviewReplyResponse> toReplyResponsePage(
+            Page<ProductReviewReplyEntity> replies,
+            Long userId
+    ) {
         if (replies.isEmpty()) {
-            return replies.map(reply -> toReplyResponse(reply, 0, 0, null));
+            return replies.map(reply -> toReplyResponse(reply, 0, 0, null, 0));
         }
         List<Long> replyIds = replies.getContent().stream()
                 .map(ProductReviewReplyEntity::getId)
@@ -94,6 +137,10 @@ public class ProductReviewService {
                 ));
 
         Map<Long, ReactionType> ownReactionsByReplyId;
+        Map<Long, Long> replyCountsByParentId = reviewReplyRepository
+                .countVisibleDirectRepliesByParentIds(replyIds, ReplyStatus.PUBLISHED)
+                .stream()
+                .collect(Collectors.toMap(DirectReplyCount::getParentId, DirectReplyCount::getCount));
 
         if (userId == null) {
             ownReactionsByReplyId = Map.of();
@@ -113,7 +160,8 @@ public class ProductReviewService {
             long dislikes = counts == null ? 0 : counts.getDislikes();
             ReactionType ownReaction = ownReactionsByReplyId.get(reply.getId());
 
-            return toReplyResponse(reply, likes, dislikes, ownReaction);
+            long replyCount = replyCountsByParentId.getOrDefault(reply.getId(), 0L);
+            return toReplyResponse(reply, likes, dislikes, ownReaction, replyCount);
         });
     }
 
@@ -175,38 +223,17 @@ public class ProductReviewService {
         }
     }
 
-    private ProductReviewReplyResponse toReplyResponse(
-            ProductReviewReplyEntity reply,
-            long likes,
-            long dislikes,
-            ReactionType myReaction
-    ) {
-        return new ProductReviewReplyResponse(
-                reply.getId(),
-                reply.getAuthor().getId(),
-                reply.getReview().getId(),
-                reply.getAuthor().getName(),
-                Boolean.TRUE.equals(reply.getIsSeller()),
-                reply.getReplyTo() == null ? null : reply.getReplyTo().getId(),
-                reply.getText(),
-                reply.getCreatedAt(),
-                likes,
-                dislikes,
-                myReaction
-        );
-    }
-
     @Transactional(readOnly = true)
     public Page<ProductReviewResponse> getProductReviews(UUID productId, Pageable pageable) {
         Page<ProductReviewEntity> reviews = reviewRepository
-                .findAllByProduct_PublicIdAndModerationStatusAndDeletedAtIsNull(
+                .findVisibleByProductPublicIdAndModerationStatus(
                         productId,
                         ModerationStatus.APPROVED,
                         pageable
                 );
 
         if (reviews.isEmpty()) {
-            return reviews.map(review -> toResponse(review, 0, 0));
+            return reviews.map(review -> toResponse(review, 0, 0, 0));
         }
 
         List<Long> reviewIds = reviews.getContent().stream()
@@ -220,12 +247,18 @@ public class ProductReviewService {
                         Function.identity()
                 ));
 
+        Map<Long, Long> replyCountsByReviewId = reviewReplyRepository
+                .countVisibleRootRepliesByReviewIds(reviewIds, ReplyStatus.PUBLISHED)
+                .stream()
+                .collect(Collectors.toMap(ReviewReplyCount::getReviewId, ReviewReplyCount::getCount));
+
         return reviews.map(review -> {
             ReviewReactionCounts counts = countsByReviewId.get(review.getId());
             long likes = counts == null ? 0 : counts.getLikes();
             long dislikes = counts == null ? 0 : counts.getDislikes();
 
-            return toResponse(review, likes, dislikes);
+            long replyCount = replyCountsByReviewId.getOrDefault(review.getId(), 0L);
+            return toResponse(review, likes, dislikes, replyCount);
         });
     }
 
@@ -377,8 +410,11 @@ public class ProductReviewService {
                 moderation.getReviewText(),
                 counts.getLikes(),
                 counts.getDislikes(),
-                review.getCreatedAt()
+                review.getCreatedAt(),
+                countRootReplies(review.getId()),
+                review.getDeletedAt() != null
         );
+
         return new MyProductReviewResponse(
                 response,
                 moderation.getStatus(),
@@ -387,17 +423,55 @@ public class ProductReviewService {
         );
     }
 
-    private ProductReviewResponse toResponse(ProductReviewEntity review, long likes, long dislikes) {
+    private long countRootReplies(Long reviewId) {
+        return reviewReplyRepository.countVisibleRootRepliesByReviewIds(List.of(reviewId), ReplyStatus.PUBLISHED)
+                .stream()
+                .mapToLong(ReviewReplyCount::getCount)
+                .sum();
+    }
+
+    private ProductReviewResponse toResponse(
+            ProductReviewEntity review,
+            long likes,
+            long dislikes,
+            long replyCount
+    ) {
         return new ProductReviewResponse(
                 review.getId(),
                 review.getProduct().getPublicId(),
                 review.getUser().getId(),
                 review.getUser().getName(),
-                review.getRating(),
-                review.getText(),
+                review.getDeletedAt() == null ? review.getRating() : 0,
+                review.getDeletedAt() == null ? review.getText() : null,
                 likes,
                 dislikes,
-                review.getCreatedAt()
+                review.getCreatedAt(),
+                replyCount,
+                review.getDeletedAt() != null
+        );
+    }
+
+    private ProductReviewReplyResponse toReplyResponse(
+            ProductReviewReplyEntity reply,
+            long likes,
+            long dislikes,
+            ReactionType myReaction,
+            long replyCount
+    ) {
+        return new ProductReviewReplyResponse(
+                reply.getId(),
+                reply.getAuthor().getId(),
+                reply.getReview().getId(),
+                reply.getAuthor().getName(),
+                Boolean.TRUE.equals(reply.getIsSeller()),
+                reply.getReplyTo() == null ? null : reply.getReplyTo().getId(),
+                reply.getStatus() == ReplyStatus.PUBLISHED ? reply.getText() : null,
+                reply.getCreatedAt(),
+                likes,
+                dislikes,
+                myReaction,
+                replyCount,
+                reply.getStatus()
         );
     }
 }

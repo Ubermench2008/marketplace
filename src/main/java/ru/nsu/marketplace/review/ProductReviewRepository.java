@@ -15,7 +15,21 @@ import java.util.UUID;
 
 public interface ProductReviewRepository extends JpaRepository<ProductReviewEntity, Long> {
     @EntityGraph(attributePaths = {"user", "product"})
-    Page<ProductReviewEntity> findAllByProduct_PublicIdAndModerationStatusAndDeletedAtIsNull(
+    @Query("""
+        select review from ProductReviewEntity review
+        where review.product.publicId = :productId
+          and review.moderationStatus = :moderationStatus
+          and (
+              review.deletedAt is null
+              or exists (
+                  select reply.id
+                  from ProductReviewReplyEntity reply
+                  where reply.review = review
+                    and reply.replyTo is null
+              )
+          )
+        """)
+    Page<ProductReviewEntity> findVisibleByProductPublicIdAndModerationStatus(
             UUID productId, ModerationStatus moderationStatus, Pageable pageable
     );
 
@@ -26,4 +40,6 @@ public interface ProductReviewRepository extends JpaRepository<ProductReviewEnti
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select review from ProductReviewEntity review where review.id = :id")
     Optional<ProductReviewEntity> findByIdForUpdate(@Param("id") Long id);
+
+
 }

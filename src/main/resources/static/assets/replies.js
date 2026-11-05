@@ -25,11 +25,12 @@ function reactionControls(reply) {
         .join('')}</div>`;
 }
 
-export function attachReplies(card, reviewId) {
+export function attachReplies(card, reviewId, replyCount, allowReply = true) {
+    const summary = replyCount == null ? 'Обсуждение отзыва' : `Обсуждение отзыва · ${e(replyCount)}`;
     card.insertAdjacentHTML(
         'beforeend',
         '<details class="reply-thread">' +
-            '<summary>Обсуждение отзыва</summary>' +
+            `<summary>${summary}</summary>` +
             '<div class="reply-thread-body">' +
             '<div class="reply-composer">' +
             '</div>' +
@@ -42,12 +43,13 @@ export function attachReplies(card, reviewId) {
     const list = thread.querySelector('.reply-list');
     const composer = thread.querySelector('.reply-composer');
     let started = false;
-    let revision = 0;
+    const revisions = new WeakMap();
     let number = 0;
     let target = null;
     let sending = false;
 
     function renderComposer() {
+        if (!allowReply) return;
         if (!canShop()) {
             composer.innerHTML = currentUser()
                 ? ''
@@ -85,16 +87,21 @@ export function attachReplies(card, reviewId) {
                 sending = true;
                 form.elements.text.disabled = true;
                 form.querySelector('.form-error').hidden = true;
+                const replyTarget = target;
                 try {
                     await api(`/reviews/${reviewId}/replies`, {
                         method: 'POST',
-                        body: { text, replyToId: target?.id ?? null }
+                        body: { text, replyToId: replyTarget?.id ?? null }
                     });
                     form.reset();
                     target = null;
                     paintTarget();
                     toast('Ответ опубликован');
-                    await load(0);
+                    if (replyTarget) {
+                        await replyTarget.refresh();
+                    } else {
+                        await load(0);
+                    }
                 } catch (error) {
                     formError(form, error);
                     if (error.status === 0) {
@@ -124,7 +131,7 @@ export function attachReplies(card, reviewId) {
         if (!node) return;
         node.hidden = !target;
         node.innerHTML = target
-            ? `Ответ ${e(target.authorName)} · сообщение #${e(target.id)} <button type="button" class="text-button">Отменить</button>`
+            ? `Ответ для ${e(target.authorName)} <button type="button" class="text-button">Отменить</button>`
             : '';
         node.querySelector('button')?.addEventListener('click', () => {
             target = null;
@@ -134,65 +141,151 @@ export function attachReplies(card, reviewId) {
 
     async function load(pageNumber = 0) {
         number = pageNumber;
-        const ownRevision = ++revision;
-        loading(list);
+        await loadLevel(list, null, pageNumber, 0, thread);
+    }
+
+    async function loadLevel(container, parentId, pageNumber, depth, branch) {
+        const revision = (revisions.get(container) ?? 0) + 1;
+        revisions.set(container, revision);
+        if (!container.children.length) loading(container);
+
         try {
-            const query = pageQuery(number);
+            const query = pageQuery(pageNumber);
             query.set('size', '20');
-            const page = pageData(await api(`/reviews/${reviewId}/replies?${query}`));
-            if (!card.isConnected || ownRevision !== revision) return;
-            if (!page.items.length && number > 0) {
-                await load(number - 1);
+            if (parentId != null) query.set('parentId', parentId);
+
+            const page = pageData(await api(`/reviews/${reviewId}/replies/children?${query}`));
+            if (!container.isConnected || revisions.get(container) !== revision) return;
+
+            if (!page.items.length && pageNumber > 0) {
+                if (parentId == null) number = pageNumber - 1;
+                await loadLevel(container, parentId, pageNumber - 1, depth, branch);
                 return;
             }
-            list.innerHTML =
-                `<p class="fine-print">Ответов: ${page.total} · Сначала наиболее полезные</p>` +
-                `<div class="reply-messages">${
-                    page.items
-                        .map(
-                            (reply) =>
-                                `<article class="reply-message" data-reply-id="${e(reply.id)}">` +
-                                `<header>` +
-                                `<strong>${e(reply.authorName)}</strong>${reply.isSeller ? '<span class="reply-seller">Продавец товара</span>' : ''}${String(reply.authorId) === String(currentUser()?.id) ? '<span class="fine-print">Это вы</span>' : ''}<time datetime="${e(reply.createdAt)}">${date(reply.createdAt)}</time>` +
-                                `</header>${reply.replyToId ? `<p class="reply-reference">В ответ на сообщение #${e(reply.replyToId)}</p>` : ''}<p class="review-text">${e(reply.text)}</p>${reactionControls(reply)}${canShop() ? '<button type="button" class="text-button reply-to-message">Ответить</button>' : ''}</article>`
-                        )
-                        .join('') || '<p class="reviews-empty">Обсуждение пока пусто.</p>'
-                }</div>`;
-            pagination(list, page, load);
-            list.querySelectorAll('.reply-message').forEach((message, index) => {
-                const reply = page.items[index];
-                message.querySelector('.reply-to-message')?.addEventListener('click', () => {
-                    if (sending) return;
-                    target = reply;
-                    paintTarget();
-                    composer.querySelector('textarea').focus();
-                });
-                const controls = message.querySelector('.review-reactions');
-                let pending = false;
-                controls.onclick = async (event) => {
-                    const button = event.target.closest('[data-reaction]');
-                    if (!button || button.disabled || pending || !canShop()) return;
-                    pending = true;
-                    controls.querySelectorAll('button').forEach((control) => (control.disabled = true));
-                    const next =
-                        reply.myReaction === button.dataset.reaction ? null : button.dataset.reaction;
-                    try {
-                        await api(`/review-replies/${reply.id}/reaction`, {
-                            method: next ? 'PUT' : 'DELETE',
-                            ...(next ? { body: { type: next } } : {})
-                        });
-                        await load(number);
-                    } catch (error) {
-                        toast(error.message, 'error');
-                        if (card.isConnected) await load(number);
-                    } finally {
-                        pending = false;
-                    }
-                };
+
+            const existingBranches = new Map();
+            container.querySelectorAll(':scope > .reply-level > .reply-node').forEach((node) => {
+                existingBranches.set(node.dataset.replyId, node.querySelector(':scope > .reply-branch'));
+            });
+
+            const level = document.createElement('div');
+            level.className = 'reply-level';
+
+            for (const reply of page.items) {
+                const previousBranch = existingBranches.get(String(reply.id));
+                level.append(renderReply(reply, depth, previousBranch, () => {
+                    return loadLevel(container, parentId, pageNumber, depth, branch);
+                }));
+            }
+
+            if (page.items.length) {
+                container.replaceChildren(level);
+            } else {
+                container.innerHTML = '<p class="reviews-empty">Ответов пока нет.</p>';
+            }
+
+            branch.querySelector(':scope > summary').textContent = parentId == null
+                ? `Обсуждение отзыва · ${page.total}`
+                : `Ответы · ${page.total}`;
+
+            pagination(container, page, (nextPage) => {
+                if (parentId == null) return load(nextPage);
+                return loadLevel(container, parentId, nextPage, depth, branch);
             });
         } catch (error) {
-            if (card.isConnected && ownRevision === revision) showError(list, error, () => load(number));
+            if (container.isConnected && revisions.get(container) === revision) {
+                showError(container, error, () => loadLevel(container, parentId, pageNumber, depth, branch));
+            }
         }
+    }
+
+    function renderReply(reply, depth, previousBranch, reloadLevel) {
+        const node = document.createElement('div');
+        node.className = 'reply-node';
+        node.dataset.replyId = reply.id;
+
+        const message = document.createElement('article');
+        message.className = 'reply-message';
+        node.append(message);
+
+        const canAnswer = allowReply && canShop() && reply.status !== 'HIDDEN';
+        if (reply.status === 'HIDDEN') {
+            message.innerHTML = '<p class="fine-print">Сообщение скрыто</p>';
+        } else {
+            const seller = reply.isSeller ? '<span class="reply-seller">Продавец товара</span>' : '';
+            const own = String(reply.authorId) === String(currentUser()?.id)
+                ? '<span class="fine-print">Это вы</span>'
+                : '';
+            const answer = canAnswer
+                ? '<button type="button" class="text-button reply-to-message">Ответить</button>'
+                : '';
+            const reactions = allowReply ? reactionControls(reply) : '';
+
+            message.innerHTML =
+                `<header><strong>${e(reply.authorName)}</strong>${seller}${own}` +
+                `<time datetime="${e(reply.createdAt)}">${date(reply.createdAt)}</time></header>` +
+                `<p class="review-text">${e(reply.text)}</p>${reactions}${answer}`;
+
+            if (allowReply) bindReactionControls(message, reply, reloadLevel);
+        }
+
+        const branch = previousBranch || document.createElement('details');
+        branch.className = depth < 3 ? 'reply-branch reply-branch-indented' : 'reply-branch';
+        if (!previousBranch) {
+            branch.innerHTML = '<summary></summary><div class="reply-children" aria-live="polite"></div>';
+        }
+        branch.hidden = !reply.replyCount;
+        branch.querySelector('summary').textContent = `Ответы · ${reply.replyCount}`;
+
+        const children = branch.querySelector(':scope > .reply-children');
+        function refreshChildren() {
+            branch.hidden = false;
+            const wasOpen = branch.open;
+            branch.open = true;
+            if (!wasOpen && !children.children.length) return;
+            return loadLevel(children, reply.id, 0, depth + 1, branch);
+        }
+
+        branch.ontoggle = () => {
+            if (branch.open && !children.children.length) {
+                loadLevel(children, reply.id, 0, depth + 1, branch);
+            }
+        };
+        node.append(branch);
+
+        message.querySelector('.reply-to-message')?.addEventListener('click', () => {
+            if (sending) return;
+            target = { id: reply.id, authorName: reply.authorName, refresh: refreshChildren };
+            paintTarget();
+            composer.querySelector('textarea').focus();
+        });
+        return node;
+    }
+
+    function bindReactionControls(message, reply, reloadLevel) {
+        const controls = message.querySelector('.review-reactions');
+        let pending = false;
+        controls.onclick = async (event) => {
+            const button = event.target.closest('[data-reaction]');
+            if (!button || button.disabled || pending || !canShop()) return;
+
+            pending = true;
+            controls.querySelectorAll('button').forEach((control) => (control.disabled = true));
+            const next = reply.myReaction === button.dataset.reaction ? null : button.dataset.reaction;
+            try {
+                await api(`/review-replies/${reply.id}/reaction`, {
+                    method: next ? 'PUT' : 'DELETE',
+                    ...(next ? { body: { type: next } } : {})
+                });
+            } catch (error) {
+                toast(error.message, 'error');
+            } finally {
+                pending = false;
+                if (controls.isConnected) {
+                    await reloadLevel();
+                }
+            }
+        };
     }
     thread.addEventListener('toggle', () => {
         if (thread.open && !started) {

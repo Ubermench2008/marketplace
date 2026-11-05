@@ -36,6 +36,9 @@ function reactionButtons(review, selected, enabled) {
 }
 
 function reviewCard(review, own = null) {
+    if (review.deleted) {
+        return '<article class="review-card deleted-review"><p class="fine-print">Отзыв удалён</p></article>';
+    }
     const labels = { PENDING: 'На модерации', APPROVED: 'Опубликован', REJECTED: 'Отклонён' };
     return (
         `<article class="review-card ${own ? 'own-review' : ''}">` +
@@ -138,7 +141,8 @@ export async function productReviews(container, productId) {
             area.querySelectorAll('.review-card').forEach((card, index) => {
                 const review = visibleReviews[index];
                 if (own && index === 0 && own.moderationStatus !== 'APPROVED') return;
-                attachReplies(card, review.id);
+                attachReplies(card, review.id, review.replyCount, !review.deleted);
+                if (review.deleted) return;
                 let selected = reactionsByReview.get(String(review.id)) || null;
                 card.insertAdjacentHTML('beforeend', reactionButtons(review, selected, canShop()));
                 const controls = card.querySelector('.review-reactions');

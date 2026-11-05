@@ -10,13 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import ru.nsu.marketplace.review.dto.CreateProductReviewRequest;
 import ru.nsu.marketplace.review.dto.MyProductReviewResponse;
 import ru.nsu.marketplace.review.dto.ProductReviewResponse;
@@ -66,6 +60,16 @@ public class ProductReviewController {
     ) {
         reviewService.createProductReviewReply(reviewId, reply, userId);
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @GetMapping("/api/reviews/{reviewId}/replies/children")
+    public Page<ProductReviewReplyResponse> getDirectReplies(
+        @PathVariable Long reviewId,
+        @RequestParam(required = false) Long parentId,
+        @AuthenticationPrincipal Long userId,
+        Pageable pageable
+    ) {
+        return reviewService.getDirectReplies(reviewId, parentId, pageable, userId);
     }
 
     @PostMapping("/api/products/{productId}/reviews")

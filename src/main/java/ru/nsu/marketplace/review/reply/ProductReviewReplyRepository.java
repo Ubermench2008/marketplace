@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 import ru.nsu.marketplace.review.reaction.ReactionType;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ProductReviewReplyRepository extends JpaRepository<ProductReviewReplyEntity, Long> {
@@ -36,6 +37,99 @@ public interface ProductReviewReplyRepository extends JpaRepository<ProductRevie
             @Param("likeType") ReactionType likeType,
             Pageable pageable
     );
+
+    @EntityGraph(attributePaths = "author")
+    @Query(
+        value = """
+                select reply
+                from ProductReviewReplyEntity reply
+                where reply.review.id = :reviewId
+                  and (
+                      (:parentId is null and reply.replyTo is null)
+                      or
+                      (:parentId is not null and reply.replyTo.id = :parentId)
+                  )
+                  and (
+                      reply.status = :publishedStatus
+                      or exists (
+                          select child.id
+                          from ProductReviewReplyEntity child
+                          where child.replyTo = reply
+                      )
+                  )
+                order by (
+                    select count(reaction)
+                    from ProductReviewReplyReactionEntity reaction
+                    where reaction.reply = reply
+                      and reaction.type = :likeType
+                ) desc, reply.id asc
+                """,
+        countQuery = """
+                select count(reply)
+                from ProductReviewReplyEntity reply
+                where reply.review.id = :reviewId
+                  and (
+                      (:parentId is null and reply.replyTo is null)
+                      or
+                      (:parentId is not null and reply.replyTo.id = :parentId)
+                  )
+                  and (
+                      reply.status = :publishedStatus
+                      or exists (
+                          select child.id
+                          from ProductReviewReplyEntity child
+                          where child.replyTo = reply
+                      )
+                  )
+                """
+    )
+    Page<ProductReviewReplyEntity> findVisibleDirectReplies(
+        @Param("reviewId") Long reviewId,
+        @Param("parentId") Long parentId,
+        @Param("publishedStatus") ReplyStatus publishedStatus,
+        @Param("likeType") ReactionType likeType,
+        Pageable pageable
+    );
+
+    @Query("""
+        select reply.review.id as reviewId, count(reply) as count
+        from ProductReviewReplyEntity reply
+        where reply.review.id in :reviewIds
+          and reply.replyTo is null
+          and (
+              reply.status = :publishedStatus
+              or exists (
+                  select child.id
+                  from ProductReviewReplyEntity child
+                  where child.replyTo = reply
+              )
+          )
+        group by reply.review.id
+        """)
+    List<ReviewReplyCount> countVisibleRootRepliesByReviewIds(
+        @Param("reviewIds") List<Long> reviewIds,
+        @Param("publishedStatus") ReplyStatus publishedStatus
+    );
+
+    @Query("""
+        select reply.replyTo.id as parentId, count(reply) as count
+        from ProductReviewReplyEntity reply
+        where reply.replyTo.id in :parentIds
+          and (
+              reply.status = :publishedStatus
+              or exists (
+                  select child.id
+                  from ProductReviewReplyEntity child
+                  where child.replyTo = reply
+              )
+          )
+        group by reply.replyTo.id
+        """)
+    List<DirectReplyCount> countVisibleDirectRepliesByParentIds(
+        @Param("parentIds") List<Long> parentIds,
+        @Param("publishedStatus") ReplyStatus publishedStatus
+    );
+
     @EntityGraph(attributePaths = "author")
     Page<ProductReviewReplyEntity> findByReview_IdAndStatus(Long reviewId, ReplyStatus status, Pageable pageable);
     Page<ProductReviewReplyEntity> findByStatus(ReplyStatus status, Pageable pageable);

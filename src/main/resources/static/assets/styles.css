@@ -27,7 +27,14 @@
     .reply-thread { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
     .reply-thread > summary { cursor: pointer; font-size: 13px; color: #456536; padding: 8px 0; }
     .reply-thread-body { padding-top: 14px; }
-    .reply-messages { max-height: 560px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+    .reply-list { max-height: 560px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+    .reply-branch { padding: 8px 0; }
+    .reply-branch > summary { cursor: pointer; color: #456536; font-size: 13px; }
+    .reply-branch-indented > .reply-children {
+        border-inline-start: 1px solid var(--line);
+        margin-inline-start: 6px;
+        padding-inline-start: clamp(8px, 2vw, 18px);
+    }
     .reply-message { padding: 18px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
     .reply-message header { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
     .reply-message time { color: var(--muted); font-size: 10px; }

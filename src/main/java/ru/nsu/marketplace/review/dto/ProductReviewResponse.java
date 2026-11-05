@@ -12,5 +12,7 @@ public record ProductReviewResponse(
         String text,
         long likes,
         long dislikes,
-        Instant createdAt
+        Instant createdAt,
+        long replyCount,
+        boolean deleted
 ) {}
