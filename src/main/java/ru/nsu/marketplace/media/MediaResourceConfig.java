@@ -1,6 +1,6 @@
 package ru.nsu.marketplace.media;
 
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -8,16 +8,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import java.nio.file.Path;
 
 @Configuration
+@RequiredArgsConstructor
 public class MediaResourceConfig implements WebMvcConfigurer {
-    private final String storageLocation;
-
-    public MediaResourceConfig(@Value("${data.storage.location}") String storageLocation) {
-        this.storageLocation = storageLocation;
-    }
+    private final MediaStorageProperties properties;
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String location = Path.of(storageLocation).toAbsolutePath().normalize().toUri().toString();
+        String location = Path.of(properties.location()).toAbsolutePath().normalize().toUri().toString();
         if (!location.endsWith("/")) {
             location += "/";
         }

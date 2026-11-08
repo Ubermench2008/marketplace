@@ -1,7 +1,7 @@
 package ru.nsu.marketplace.media;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -17,9 +17,9 @@ import java.util.UUID;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class MediaStorageService {
-    @Value("${data.storage.location}")
-    private String storageLocation;
+    private final MediaStorageProperties properties;
 
     public String saveImage(MultipartFile image) {
         if (image == null || image.isEmpty()) {
@@ -28,7 +28,7 @@ public class MediaStorageService {
 
         String extension = getImageExtension(image.getContentType());
         UUID fileId = UUID.randomUUID();
-        Path directory = Path.of(storageLocation);
+        Path directory = Path.of(properties.location());
         Path path = directory.resolve(fileId + extension);
 
         try (InputStream input = image.getInputStream()) {
@@ -97,7 +97,7 @@ public class MediaStorageService {
         }
 
         Path fileName = Path.of(imageUrl).getFileName();
-        return Path.of(storageLocation).resolve(fileName).normalize();
+        return Path.of(properties.location()).resolve(fileName).normalize();
     }
 
     private String getImageExtension(String contentType) {
