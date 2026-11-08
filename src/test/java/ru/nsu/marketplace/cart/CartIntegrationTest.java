@@ -16,6 +16,7 @@ import ru.nsu.marketplace.auth.dto.LoginResponse;
 import ru.nsu.marketplace.cart.dto.CartResponse;
 import ru.nsu.marketplace.product.ProductCardRepository;
 import ru.nsu.marketplace.product.ProductRepository;
+import ru.nsu.marketplace.product.ProductCategoryRepository;
 import ru.nsu.marketplace.product.model.ProductCardEntity;
 import ru.nsu.marketplace.product.model.ProductEntity;
 import ru.nsu.marketplace.user.Role;
@@ -55,6 +56,9 @@ public class CartIntegrationTest {
 
     @Autowired
     private ProductRepository productRepository;
+
+    @Autowired
+    private ProductCategoryRepository productCategoryRepository;
 
     @Autowired
     private ProductCardRepository productCardRepository;
@@ -223,6 +227,7 @@ public class CartIntegrationTest {
         ProductEntity product = ProductEntity.builder()
                 .publicId(UUID.randomUUID())
                 .slug(slug)
+                .category(productCategoryRepository.findBySlug("other").orElseThrow())
                 .name(slug)
                 .description("Product description for cart integration test.")
                 .seller(seller)

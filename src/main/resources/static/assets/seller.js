@@ -148,6 +148,7 @@ async function loadStockEditor(panel, productId) {
 
 export async function productEditor(view, id) {
     const creating = id === 'new';
+    const categories = creating ? await api('/catalog/categories', { publicRequest: true }) : [];
     let product = creating
         ? { name: '', slug: '', description: '', price: '', status: 'OFF', moderationStatus: 'NOT_SUBMITTED' }
         : await api(`/products/${encodeURIComponent(id)}`);
@@ -196,7 +197,11 @@ export async function productEditor(view, id) {
         `</label>` +
         `</div>` +
         (creating
-            ? '<label>Начальный остаток, шт.' +
+            ? '<label>Категория<select name="categorySlug" required>' +
+              '<option value="">Выберите категорию</option>' +
+              categories.map((category) => `<option value="${e(category.slug)}">${e(category.name)}</option>`).join('') +
+              '</select></label>' +
+              '<label>Начальный остаток, шт.' +
               `<input name="initialQuantity" type="number" min="0" max="${maxStockQuantity}" step="1" value="0" required>` +
               '<span class="field-hint">Укажите, сколько единиц уже есть на складе. Ноль допустим.</span></label>'
             : '') +
@@ -348,6 +353,7 @@ export async function productEditor(view, id) {
         (creating
             ? Object.values(values()).some((value) => value !== '' && value !== 0) ||
               form.elements.initialQuantity.value !== '0' ||
+              form.elements.categorySlug.value !== '' ||
               images.length ||
               preview
             : dirty());
@@ -449,7 +455,8 @@ export async function productEditor(view, id) {
                 if (creating) {
                     const productData = {
                         ...values(),
-                        initialQuantity: form.elements.initialQuantity.valueAsNumber
+                        initialQuantity: form.elements.initialQuantity.valueAsNumber,
+                        categorySlug: form.elements.categorySlug.value
                     };
                     const body = new FormData();
                     body.append(

@@ -12,16 +12,12 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.nsu.marketplace.common.moderation.ModerationStatus;
 import ru.nsu.marketplace.media.MediaImageDeletionRequested;
 import ru.nsu.marketplace.media.MediaStorageService;
-import ru.nsu.marketplace.product.dto.CreateProductRequest;
-import ru.nsu.marketplace.product.dto.ProductCardResponse;
-import ru.nsu.marketplace.product.dto.ProductDetailsImageResponse;
-import ru.nsu.marketplace.product.dto.ProductDetailsResponse;
-import ru.nsu.marketplace.product.dto.UpdateProductImageOrderRequest;
-import ru.nsu.marketplace.product.dto.UpdateProductRequest;
+import ru.nsu.marketplace.product.dto.*;
 import ru.nsu.marketplace.product.exception.ProductModerationStateException;
 import ru.nsu.marketplace.product.exception.ProductNotFoundException;
 import ru.nsu.marketplace.product.exception.ProductStateException;
 import ru.nsu.marketplace.product.model.ProductCardEntity;
+import ru.nsu.marketplace.product.model.ProductCategoryEntity;
 import ru.nsu.marketplace.product.model.ProductDetailsImageEntity;
 import ru.nsu.marketplace.product.model.ProductEntity;
 import ru.nsu.marketplace.product.model.ProductStatus;
@@ -43,6 +39,7 @@ import java.util.*;
 public class ProductService {
     private final ProductCardRepository productCardRepository;
     private final ProductRepository productRepository;
+    private final ProductCategoryRepository productCategoryRepository;
     private final ProductModerationRepository productModerationRepository;
     private final ProductDetailsImageRepository productDetailsImageRepository;
     private final UserRepository userRepository;
@@ -51,15 +48,30 @@ public class ProductService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
-    public Page<ProductCardResponse> getCatalogProductCards(Pageable pageable) {
-        return productCardRepository.findAll(pageable)
+    public List<ProductCategoryResponse> getProductCategories() {
+        return productCategoryRepository.findAllByOrderByNameAsc().stream()
+            .map(category -> new ProductCategoryResponse(category.getSlug(), category.getName()))
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductCardResponse> getCatalogProductCards(CatalogFilter filter, Pageable pageable) {
+        return productCardRepository
+                .findAllByProduct_StatusAndProduct_ModerationStatus(
+                    ProductStatus.ACTIVE,
+                    ModerationStatus.APPROVED,
+                    filter.category(),
+                    filter.minPrice(),
+                    filter.maxPrice(),
+                    pageable
+                )
                 .map(this::toCardResponse);
     }
 
     @Transactional(readOnly = true)
     public Page<ProductCardResponse> getSellerProductCards(Pageable pageable, Long sellerId) {
         return productCardRepository.findAllByProduct_Seller_Id(sellerId, pageable)
-                .map(this::toCardResponse);
+            .map(this::toCardResponse);
     }
 
     @Transactional(readOnly = true)
@@ -94,6 +106,10 @@ public class ProductService {
                 .build();
 
         ensureSellerOwnsProduct(product, userId);
+
+        ProductCategoryEntity category = productCategoryRepository.findBySlug(request.categorySlug())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown product category: " + request.categorySlug()));
+        product.setCategory(category);
 
         ProductEntity savedProduct = productRepository.save(product);
 
@@ -547,7 +563,8 @@ public class ProductService {
                 card.getProduct().getName(),
                 card.getProduct().getPrice(),
                 card.getPreviewImageUrl(),
-                card.getProduct().getStatus()
+                card.getProduct().getStatus(),
+                card.getProduct().getCategory().getName()
         );
     }
 

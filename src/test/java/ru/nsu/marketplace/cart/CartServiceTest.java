@@ -75,7 +75,8 @@ public class CartServiceTest {
                 "Product",
                 item.getProduct().getPrice(),
                 card.getPreviewImageUrl(),
-                item.getProduct().getStatus()
+                item.getProduct().getStatus(),
+                null
             );
             when(productCardRepository.findByProduct_PublicId(item.getProduct().getPublicId())).thenReturn(
                 Optional.of(card)

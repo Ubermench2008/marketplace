@@ -101,8 +101,9 @@
 | Область | Маршрут и методы |
 | --- | --- |
 | Вход и регистрация | `POST /auth/login`, `POST /auth/register` |
-| Каталог | `GET /catalog/products` |
-| Товар | `POST /products`, `GET, PATCH /products/{productId}` |
+| Каталог | `GET /catalog/products` — только одобренные товары в продаже (`APPROVED` и `ACTIVE`) с остатком больше нуля. Необязательные фильтры: `category` (slug), `minPrice` и `maxPrice` (границы включительно) |
+| Категории | `GET /catalog/categories` — справочник с полями `slug` и `name` |
+| Товар | `POST /products` — в JSON-части `product` обязателен `categorySlug` из справочника; `GET, PATCH /products/{productId}` |
 | Публичные остатки | `GET /products/stocks?productIds=...` — только активные товары |
 | Кабинет продавца | `GET /seller/products`, `GET, PATCH /seller/products/{productId}/stock` — остаток собственного товара |
 | Изображения | `GET, POST /products/{productId}/details-images`, `PUT .../details-images/order`, `DELETE .../details-images/{imageId}`, `PUT .../preview-image` |

@@ -32,5 +32,8 @@ public record CreateProductRequest(
 
         @NotNull(message = "Initial quantity is required")
         @PositiveOrZero(message = "Initial quantity must be zero or greater")
-        Integer initialQuantity
+        Integer initialQuantity,
+
+        @NotBlank(message = "Category is required")
+        String categorySlug
 ) {}

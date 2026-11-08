@@ -1,6 +1,7 @@
 package ru.nsu.marketplace.product;
 
 import ru.nsu.marketplace.product.model.ProductCardEntity;
+import ru.nsu.marketplace.product.model.ProductCategoryEntity;
 import ru.nsu.marketplace.product.model.ProductEntity;
 import ru.nsu.marketplace.user.Role;
 import ru.nsu.marketplace.user.UserEntity;
@@ -13,6 +14,13 @@ public final class ProductTestFixtures {
 
     private ProductTestFixtures() {}
 
+    static ProductCategoryEntity category() {
+        ProductCategoryEntity category = new ProductCategoryEntity();
+        category.setName("Electronics");
+        category.setSlug("electronics");
+        return category;
+    }
+
     public static ProductCardEntity createProductCard(UUID uuid) {
         ProductCardEntity entity = new ProductCardEntity();
         entity.setPreviewImageUrl("/media/products/iphone.webp");
@@ -23,6 +31,7 @@ public final class ProductTestFixtures {
             .name("iphone 16 pro")
             .price(new BigDecimal("99990.00"))
             .description("A sufficiently long product description for tests.")
+            .category(category())
             .seller(UserEntity.builder().id(10L).roles(Set.of(Role.SELLER)).build())
             .build();
         entity.setProduct(product);
@@ -46,6 +55,7 @@ public final class ProductTestFixtures {
             .name(name)
             .price(price)
             .description("A sufficiently long product description for tests.")
+            .category(category())
             .seller(UserEntity.builder().id(10L).roles(Set.of(Role.SELLER)).build())
             .build();
         entity.setProduct(product);

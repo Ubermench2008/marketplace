@@ -106,7 +106,8 @@ public class ProductCardIntegrationTest {
                           "name": "iphone 16 pro",
                           "description": "A sufficiently long product description for tests.",
                           "price": 99990.00,
-                          "initialQuantity": 7
+                          "initialQuantity": 7,
+                          "categorySlug": "electronics"
                         }
                         """.getBytes()
                                 ))

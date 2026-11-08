@@ -61,6 +61,10 @@ public class ProductEntity {
     @Column(nullable = false)
     private ModerationStatus moderationStatus = ModerationStatus.NOT_SUBMITTED;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id", nullable = false)
+    private ProductCategoryEntity category;
+
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
     @OrderBy("position ASC")
     @Builder.Default

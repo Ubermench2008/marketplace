@@ -101,7 +101,8 @@ public class ProductModificationSecurityTest {
                               "name": "iphone 16 pro",
                               "description": "A sufficiently long product description for tests.",
                               "price": 99990.00,
-                              "initialQuantity": 0
+                              "initialQuantity": 0,
+                              "categorySlug": "electronics"
                             }
                             """.getBytes()))
                     .file(image("previewImage"))

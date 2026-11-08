@@ -11,5 +11,6 @@ public record ProductCardResponse(
         String name,
         BigDecimal price,
         String imgUrl,
-        ProductStatus status
+        ProductStatus status,
+        String category
 ) {}

@@ -37,6 +37,7 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/", "/index.html", "/favicon.svg", "/assets/**", "/media/**",
                                 "/api/catalog/products",
+                                "/api/catalog/categories",
                                 "/api/products/{productId}",
                                 "/api/products/{productId}/details-images",
                                 "/api/products/{productId}/reviews",

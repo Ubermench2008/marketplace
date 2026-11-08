@@ -196,6 +196,9 @@
     .catalog-total { font-size: 14px; vertical-align: top; color: var(--muted); letter-spacing: -.02em; padding-left: 5px; }
     .sort-label { flex-direction: row; align-items: center; font-size: 12px; color: var(--muted); gap: 12px; font-weight: 400; }
     .sort-label select { font-size: 12px; border-radius: 9px; padding-block: 9px; background: transparent; }
+    .catalog-filters { display: grid; gap: 16px; padding: 18px; margin-bottom: 22px; }
+    .catalog-filter-fields { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px; }
+    .catalog-filter-fields label, .catalog-filter-fields input, .catalog-filter-fields select { min-width: 0; }
     .product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
     .product-card { background: white; border: 1px solid #e8ebe3; border-radius: 16px; overflow: hidden; transition: box-shadow .2s, transform .2s; }
     .product-card:hover { box-shadow: 0 12px 30px #173f350b; transform: translateY(-3px); }
@@ -498,6 +501,8 @@
         .section-toolbar .eyebrow { font-size: 8px; }
         .sort-label { flex-direction: column; align-items: end; gap: 5px; font-size: 9px; }
         .sort-label select { padding: 7px 20px 7px 8px; font-size: 10px; max-width: 155px; }
+        .catalog-filter-fields { grid-template-columns: 1fr 1fr; }
+        .catalog-filter-fields > label:first-child { grid-column: 1 / -1; }
         .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         .product-info { padding: 8px 11px 12px; }
         .product-price { font-size: 18px; }

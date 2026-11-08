@@ -141,6 +141,18 @@ export async function catalogPage(view) {
         `</select>` +
         `</label>` +
         `</div>` +
+        `<form class="catalog-filters panel" aria-label="Фильтры каталога">` +
+        `<div class="catalog-filter-fields">` +
+        `<label>Категория<select name="category" disabled><option value="">Все категории</option></select></label>` +
+        `<label>Цена от, ₽<input name="minPrice" type="number" min="0" step="0.01" placeholder="Любая"></label>` +
+        `<label>Цена до, ₽<input name="maxPrice" type="number" min="0" step="0.01" placeholder="Любая"></label>` +
+        `</div><div class="form-error" role="alert" tabindex="-1" hidden></div>` +
+        `<div class="button-row">` +
+        `<button type="submit" class="button small">Применить</button>` +
+        `<button type="button" class="button secondary small reset-filters">Сбросить</button>` +
+        `<span class="fine-print category-status" role="status">Загружаем категории…</span>` +
+        `<button type="button" class="text-button retry-categories" hidden>Загрузить категории снова</button>` +
+        `</div></form>` +
         `<div class="catalog-content">` +
         `</div>` +
         `</section>` +
@@ -159,13 +171,45 @@ export async function catalogPage(view) {
     };
     const area = view.querySelector('.catalog-content');
     const sort = view.querySelector('#catalog-sort');
+    const filters = view.querySelector('.catalog-filters');
+    const category = filters.elements.category;
+    const minPrice = filters.elements.minPrice;
+    const maxPrice = filters.elements.maxPrice;
+    const categoryStatus = filters.querySelector('.category-status');
+    const retryCategories = filters.querySelector('.retry-categories');
+    const filterError = filters.querySelector('.form-error');
+    let appliedFilters = new URLSearchParams();
     let revision = 0;
+
+    const loadCategories = async () => {
+        categoryStatus.textContent = 'Загружаем категории…';
+        retryCategories.hidden = true;
+        try {
+            const categories = await api('/catalog/categories', { publicRequest: true });
+            if (!view.isConnected) return;
+
+            category.insertAdjacentHTML('beforeend', categories
+                .map((item) => `<option value="${e(item.slug)}">${e(item.name)}</option>`)
+                .join(''));
+            category.disabled = false;
+            categoryStatus.textContent = '';
+        } catch {
+            if (!view.isConnected) return;
+            categoryStatus.textContent = 'Не удалось загрузить категории.';
+            retryCategories.hidden = false;
+        }
+    };
+
     const load = async (number = 0) => {
         const ownRevision = ++revision;
+        const query = pageQuery(number, sort.value);
+        for (const [name, value] of appliedFilters) {
+            query.set(name, value);
+        }
         loading(area, true);
         try {
             const page = pageData(
-                await api(`/catalog/products?${pageQuery(number, sort.value)}`, { publicRequest: true })
+                await api(`/catalog/products?${query}`, { publicRequest: true })
             );
             const stocks = await loadStocks(page.items);
             if (!view.isConnected || ownRevision !== revision) return;
@@ -174,15 +218,42 @@ export async function catalogPage(view) {
                 ? `<div class="product-grid">${page.items
                       .map((product) => productCard(product, false, stocks.get(product.id)))
                       .join('')}</div>`
-                : empty('Пока без находок', 'Когда продавцы добавят товары, они появятся здесь.', null);
+                : appliedFilters.size
+                  ? empty('Ничего не найдено', 'Измените диапазон цены или выберите другую категорию.', null)
+                  : empty('Пока без находок', 'Когда продавцы добавят товары, они появятся здесь.', null);
             bindCartButtons(area);
             pagination(area, page, load);
         } catch (error) {
             if (ownRevision === revision) showError(area, error, () => load(number));
         }
     };
+    filters.onsubmit = (event) => {
+        event.preventDefault();
+        filterError.hidden = true;
+
+        if (minPrice.value && maxPrice.value && minPrice.valueAsNumber > maxPrice.valueAsNumber) {
+            formError(filters, new Error('Цена «от» не должна превышать цену «до».'));
+            return;
+        }
+
+        appliedFilters = new URLSearchParams();
+        for (const [name, value] of new FormData(filters)) {
+            if (value) appliedFilters.set(name, value);
+        }
+        load();
+    };
+    filters.oninput = () => {
+        filterError.hidden = true;
+    };
+    filters.querySelector('.reset-filters').onclick = () => {
+        filters.reset();
+        filterError.hidden = true;
+        appliedFilters = new URLSearchParams();
+        load();
+    };
+    retryCategories.onclick = loadCategories;
     sort.onchange = () => load();
-    await load();
+    await Promise.all([loadCategories(), load()]);
 }
 
 export async function productPage(view, id) {

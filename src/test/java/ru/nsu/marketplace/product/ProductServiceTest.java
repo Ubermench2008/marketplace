@@ -16,9 +16,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.multipart.MultipartFile;
+import ru.nsu.marketplace.common.moderation.ModerationStatus;
 import ru.nsu.marketplace.media.MediaImageDeletionRequested;
 import ru.nsu.marketplace.media.MediaStorageService;
 import ru.nsu.marketplace.product.dto.CreateProductRequest;
+import ru.nsu.marketplace.product.dto.CatalogFilter;
 import ru.nsu.marketplace.product.dto.ProductCardResponse;
 import ru.nsu.marketplace.product.dto.ProductDetailsImageResponse;
 import ru.nsu.marketplace.product.dto.ProductDetailsResponse;
@@ -26,8 +28,10 @@ import ru.nsu.marketplace.product.dto.UpdateProductImageOrderRequest;
 import ru.nsu.marketplace.product.dto.UpdateProductRequest;
 import ru.nsu.marketplace.product.exception.ProductNotFoundException;
 import ru.nsu.marketplace.product.model.ProductCardEntity;
+import ru.nsu.marketplace.product.model.ProductCategoryEntity;
 import ru.nsu.marketplace.product.model.ProductDetailsImageEntity;
 import ru.nsu.marketplace.product.model.ProductEntity;
+import ru.nsu.marketplace.product.model.ProductStatus;
 import ru.nsu.marketplace.product.moderation.ProductModerationRepository;
 import ru.nsu.marketplace.product.stock.ProductStockService;
 import ru.nsu.marketplace.user.Role;
@@ -55,6 +59,9 @@ public class ProductServiceTest {
     private ProductRepository productRepository;
 
     @Mock
+    private ProductCategoryRepository productCategoryRepository;
+
+    @Mock
     private ProductDetailsImageRepository productDetailsImageRepository;
 
     @Mock
@@ -78,20 +85,28 @@ public class ProductServiceTest {
     @Test
     void shouldReturnCards() {
         ProductCardEntity entity = ProductTestFixtures.createProductCard(UUID.randomUUID());
+        entity.getProduct().setStatus(ProductStatus.ACTIVE);
+        entity.getProduct().setModerationStatus(ModerationStatus.APPROVED);
 
         Pageable pageable = PageRequest.of(0, 2);
 
         Page<ProductCardEntity> page = new PageImpl<>(List.of(entity), pageable, 1);
 
-        when(productCardRepository.findAll(pageable)).thenReturn(page);
+        when(productCardRepository.findAllByProduct_StatusAndProduct_ModerationStatus(
+                ProductStatus.ACTIVE, ModerationStatus.APPROVED, null, null, null, pageable
+        )).thenReturn(page);
 
-        Page<ProductCardResponse> result = service.getCatalogProductCards(pageable);
+        Page<ProductCardResponse> result = service.getCatalogProductCards(
+                new CatalogFilter(null, null, null), pageable
+        );
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().getFirst().name()).isEqualTo("iphone 16 pro");
         assertThat(result.getContent().getFirst().price()).isEqualByComparingTo("99990.00");
 
-        verify(productCardRepository).findAll(pageable);
+        verify(productCardRepository).findAllByProduct_StatusAndProduct_ModerationStatus(
+                ProductStatus.ACTIVE, ModerationStatus.APPROVED, null, null, null, pageable
+        );
     }
 
     @Test
@@ -100,12 +115,18 @@ public class ProductServiceTest {
 
         Pageable pageable = PageRequest.of(0, 2);
 
-        when(productCardRepository.findAll(pageable)).thenReturn(emptyPage);
+        when(productCardRepository.findAllByProduct_StatusAndProduct_ModerationStatus(
+                ProductStatus.ACTIVE, ModerationStatus.APPROVED, null, null, null, pageable
+        )).thenReturn(emptyPage);
 
-        Page<ProductCardResponse> result = service.getCatalogProductCards(pageable);
+        Page<ProductCardResponse> result = service.getCatalogProductCards(
+                new CatalogFilter(null, null, null), pageable
+        );
 
         assertThat(result).isEmpty();
-        verify(productCardRepository).findAll(pageable);
+        verify(productCardRepository).findAllByProduct_StatusAndProduct_ModerationStatus(
+                ProductStatus.ACTIVE, ModerationStatus.APPROVED, null, null, null, pageable
+        );
     }
 
     @Test
@@ -142,13 +163,15 @@ public class ProductServiceTest {
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
             new BigDecimal("99990.00"),
-            0
+            0,
+            "electronics"
         );
 
         MultipartFile previewImage = image("previewImage");
         MultipartFile detailsImage = image("detailsImages");
 
         when(userRepository.findById(10L)).thenReturn(Optional.of(seller()));
+        when(productCategoryRepository.findBySlug("electronics")).thenReturn(Optional.of(ProductTestFixtures.category()));
 
         when(productRepository.save(any(ProductEntity.class))).thenAnswer(invocation ->
             invocation.getArgument(0)
@@ -174,13 +197,34 @@ public class ProductServiceTest {
     }
 
     @Test
+    void shouldRejectCreationWithUnknownCategoryBeforeSavingProduct() {
+        CreateProductRequest request = new CreateProductRequest(
+                "iphone-16-pro",
+                "iphone 16 pro",
+                "A sufficiently long product description for tests.",
+                new BigDecimal("99990.00"),
+                0,
+                "unknown"
+        );
+        when(userRepository.findById(10L)).thenReturn(Optional.of(seller()));
+        when(productCategoryRepository.findBySlug("unknown")).thenReturn(Optional.empty());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                service.createProduct(request, image("previewImage"), List.of(image("detailsImages")), 10L)
+        );
+
+        verifyNoInteractions(productRepository, productStockService, mediaStorageService);
+    }
+
+    @Test
     void shouldRejectProductWithoutDetailsImages() {
         CreateProductRequest request = new CreateProductRequest(
             "iphone-16-pro",
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
             new BigDecimal("99990.00"),
-            0
+            0,
+            "electronics"
         );
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
@@ -199,10 +243,13 @@ public class ProductServiceTest {
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
             new BigDecimal("99990.00"),
-            0
+            0,
+            "electronics"
         );
 
+        ProductCategoryEntity category = ProductTestFixtures.category();
         when(userRepository.findById(10L)).thenReturn(Optional.of(seller()));
+        when(productCategoryRepository.findBySlug("electronics")).thenReturn(Optional.of(category));
 
         when(productRepository.save(any(ProductEntity.class))).thenAnswer(invocation ->
             invocation.getArgument(0)
@@ -222,6 +269,7 @@ public class ProductServiceTest {
         ProductCardEntity savedEntity = captor.getValue();
 
         assertThat(savedEntity.getProduct().getSeller().getId()).isEqualTo(10L);
+        assertThat(savedEntity.getProduct().getCategory()).isSameAs(category);
         assertThat(savedEntity.getProduct().getPublicId()).isNotNull();
         assertThat(savedEntity.getProduct().getSlug()).isEqualTo(request.slug());
         assertThat(savedEntity.getProduct().getName()).isEqualTo(request.name());
@@ -433,7 +481,8 @@ public class ProductServiceTest {
             "iphone 16 pro",
             "A sufficiently long product description for tests.",
             new BigDecimal("99990.00"),
-            0
+            0,
+            "electronics"
         );
         UserEntity buyer = UserEntity.builder().id(10L).roles(Set.of(Role.BUYER)).build();
         when(userRepository.findById(10L)).thenReturn(Optional.of(buyer));

@@ -24,7 +24,9 @@ import ru.nsu.marketplace.auth.SecurityConfig;
 import ru.nsu.marketplace.common.moderation.ModerationStatus;
 import ru.nsu.marketplace.product.ProductService;
 import ru.nsu.marketplace.product.dto.CreateProductRequest;
+import ru.nsu.marketplace.product.dto.CatalogFilter;
 import ru.nsu.marketplace.product.dto.ProductCardResponse;
+import ru.nsu.marketplace.product.dto.ProductCategoryResponse;
 import ru.nsu.marketplace.product.dto.ProductDetailsImageResponse;
 import ru.nsu.marketplace.product.dto.ProductDetailsResponse;
 import ru.nsu.marketplace.product.dto.UpdateProductImageOrderRequest;
@@ -143,7 +145,8 @@ public class ProductControllerTest {
                           "name": "iphone 16 pro",
                           "description": "A sufficiently long product description for tests.",
                           "price": 99990.00,
-                          "initialQuantity": 0
+                          "initialQuantity": 0,
+                          "categorySlug": "electronics"
                         }
                         """
                 )
@@ -152,6 +155,36 @@ public class ProductControllerTest {
             .andExpect(jsonPath("$.slug").value("iphone-16-pro"))
             .andExpect(jsonPath("$.name").value("iphone 16 pro"))
             .andExpect(jsonPath("$.price").value(99990.00));
+    }
+
+    @Test
+    void shouldRejectCreationWithoutCategory() throws Exception {
+        mockMvc.perform(createProductRequest("""
+                {
+                  "slug": "iphone-16-pro",
+                  "name": "iphone 16 pro",
+                  "description": "A sufficiently long product description for tests.",
+                  "price": 99990.00,
+                  "initialQuantity": 0
+                }
+                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("categorySlug"));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void shouldReadCategoriesWithoutAuthentication() throws Exception {
+        when(service.getProductCategories()).thenReturn(List.of(new ProductCategoryResponse(
+                "electronics",
+                "Electronics"
+        )));
+
+        mockMvc.perform(get("/api/catalog/categories").with(anonymous()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].slug").value("electronics"))
+                .andExpect(jsonPath("$[0].name").value("Electronics"));
     }
 
     @Test
@@ -165,7 +198,8 @@ public class ProductControllerTest {
                               "name": "",
                               "description": "A sufficiently long product description for tests.",
                               "price": 99990.00,
-                              "initialQuantity": 0
+                              "initialQuantity": 0,
+                              "categorySlug": "electronics"
                             }
                             """
                 )
@@ -186,7 +220,8 @@ public class ProductControllerTest {
                               "name": "iphone 16 pro",
                               "description": "A sufficiently long product description for tests.",
                               "price": -99990.00,
-                              "initialQuantity": 0
+                              "initialQuantity": 0,
+                              "categorySlug": "electronics"
                             }
                             """
                 )
@@ -206,7 +241,8 @@ public class ProductControllerTest {
                               "name": "iphone 16 pro",
                               "description": "A sufficiently long product description for tests.",
                               "price": -99990.00,
-                              "initialQuantity": 0
+                              "initialQuantity": 0,
+                              "categorySlug": "electronics"
                             }
                             """
                 )
@@ -264,11 +300,13 @@ public class ProductControllerTest {
             "iphone 16 pro",
             new BigDecimal("99990.00"),
             "/media/products/iphone.webp",
-            ProductStatus.OFF
+            ProductStatus.ACTIVE,
+            "Electronics"
         );
         Pageable pageable = PageRequest.of(1, 2);
 
-        when(service.getCatalogProductCards(any(Pageable.class))).thenReturn(
+        CatalogFilter filter = new CatalogFilter(null, null, null);
+        when(service.getCatalogProductCards(eq(filter), any(Pageable.class))).thenReturn(
             new PageImpl<>(List.of(response), pageable, 3)
         );
 
@@ -281,7 +319,23 @@ public class ProductControllerTest {
             .andExpect(jsonPath("$.content[0].name").value("iphone 16 pro"))
             .andExpect(jsonPath("$.page.totalElements").value(3));
 
-        verify(service).getCatalogProductCards(any(Pageable.class));
+        verify(service).getCatalogProductCards(eq(filter), any(Pageable.class));
+    }
+
+    @Test
+    void shouldBindCategoryAndPriceRangeToCatalogFilter() throws Exception {
+        CatalogFilter filter = new CatalogFilter("electronics", new BigDecimal("500"), new BigDecimal("3000"));
+        when(service.getCatalogProductCards(eq(filter), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/catalog/products")
+                        .param("category", "electronics")
+                        .param("minPrice", "500")
+                        .param("maxPrice", "3000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty());
+
+        verify(service).getCatalogProductCards(eq(filter), any(Pageable.class));
     }
 
     @Test
@@ -394,7 +448,8 @@ public class ProductControllerTest {
             "iphone 16 pro",
             new BigDecimal("99990.00"),
             "/media/new-preview.webp",
-            ProductStatus.OFF
+            ProductStatus.OFF,
+            "Electronics"
         );
 
         when(service.updateProductPreview(eq(productId), any(), eq(10L))).thenReturn(response);

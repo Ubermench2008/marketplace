@@ -11,8 +11,12 @@ import org.springframework.data.domain.Sort;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import ru.nsu.marketplace.common.moderation.ModerationStatus;
 import ru.nsu.marketplace.product.model.ProductCardEntity;
 import ru.nsu.marketplace.product.model.ProductEntity;
+import ru.nsu.marketplace.product.model.ProductStatus;
+import ru.nsu.marketplace.product.stock.ProductStockEntity;
+import ru.nsu.marketplace.product.stock.ProductStockRepository;
 import ru.nsu.marketplace.user.Role;
 import ru.nsu.marketplace.user.UserEntity;
 import ru.nsu.marketplace.user.UserRepository;
@@ -36,6 +40,12 @@ public class ProductCardRepositoryTest {
     private ProductRepository productRepository;
 
     @Autowired
+    private ProductCategoryRepository productCategoryRepository;
+
+    @Autowired
+    private ProductStockRepository stockRepository;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Container
@@ -56,6 +66,7 @@ public class ProductCardRepositoryTest {
             .price(new BigDecimal("99990.00"))
             .description("A sufficiently long product description for tests.")
             .seller(createSeller())
+            .category(productCategoryRepository.findBySlug("electronics").orElseThrow())
             .build();
         entity.setProduct(productRepository.save(product));
 
@@ -70,7 +81,7 @@ public class ProductCardRepositoryTest {
     }
 
     @Test
-    void shouldReturnCorrectProductCardPage() {
+    void shouldPaginateOnlyApprovedProductsForSaleWithPositiveStock() {
         List<ProductCardEntity> testEntities = new ArrayList<>();
         UserEntity seller = createSeller();
 
@@ -78,17 +89,33 @@ public class ProductCardRepositoryTest {
             ProductCardEntity entity = ProductTestFixtures.createProductCard(UUID.randomUUID());
             entity.getProduct().setSlug("iphone-16-pro-" + i);
             entity.getProduct().setSeller(seller);
+            entity.getProduct().setCategory(productCategoryRepository.findBySlug("electronics").orElseThrow());
+            entity.getProduct().setStatus(ProductStatus.ACTIVE);
+            entity.getProduct().setModerationStatus(ModerationStatus.APPROVED);
             testEntities.add(entity);
         }
 
         testEntities.forEach(entity -> {
             entity.setProduct(productRepository.save(entity.getProduct()));
             repository.save(entity);
+            stockRepository.save(new ProductStockEntity(null, entity.getProduct(), 1));
         });
+
+        saveCard(seller, ProductStatus.OFF, ModerationStatus.APPROVED, 1);
+        saveCard(seller, ProductStatus.ARCHIVED, ModerationStatus.APPROVED, 1);
+        saveCard(seller, ProductStatus.ACTIVE, ModerationStatus.PENDING, 1);
+        saveCard(seller, ProductStatus.ACTIVE, ModerationStatus.APPROVED, 0);
 
         Pageable pageable = PageRequest.of(1, 5, Sort.by(Sort.Direction.ASC, "product.name"));
 
-        Page<ProductCardEntity> result = repository.findAll(pageable);
+        Page<ProductCardEntity> result = repository.findAllByProduct_StatusAndProduct_ModerationStatus(
+                ProductStatus.ACTIVE,
+                ModerationStatus.APPROVED,
+                null,
+                null,
+                null,
+                pageable
+        );
 
         assertThat(result.getTotalPages()).isEqualTo(2);
         assertThat(result.getNumber()).isEqualTo(1);
@@ -100,7 +127,60 @@ public class ProductCardRepositoryTest {
         assertThat(result.hasNext()).isFalse();
         assertThat(result.hasPrevious()).isTrue();
 
-        assertThat(result.getContent().getFirst().getProduct().getName()).isEqualTo("iphone 16 pro");
+        assertThat(result.getContent()).allSatisfy(card -> {
+            assertThat(card.getProduct().getStatus()).isEqualTo(ProductStatus.ACTIVE);
+            assertThat(card.getProduct().getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+            assertThat(stockRepository.findById(card.getProduct().getId()).orElseThrow().getQuantity())
+                    .isPositive();
+        });
+    }
+
+    @Test
+    void shouldCombineCategoryAndInclusivePriceRangeBeforePagination() {
+        UserEntity seller = createSeller();
+        ProductEntity lowerBoundary = saveCard(seller, ProductStatus.ACTIVE, ModerationStatus.APPROVED, 1);
+        lowerBoundary.setPrice(new BigDecimal("500.00"));
+        ProductEntity upperBoundary = saveCard(seller, ProductStatus.ACTIVE, ModerationStatus.APPROVED, 1);
+        upperBoundary.setPrice(new BigDecimal("900.00"));
+        ProductEntity outsidePrice = saveCard(seller, ProductStatus.ACTIVE, ModerationStatus.APPROVED, 1);
+        outsidePrice.setPrice(new BigDecimal("901.00"));
+        ProductEntity outsideCategory = saveCard(seller, ProductStatus.ACTIVE, ModerationStatus.APPROVED, 1);
+        outsideCategory.setPrice(new BigDecimal("800.00"));
+        outsideCategory.setCategory(productCategoryRepository.findBySlug("sport-fitness").orElseThrow());
+
+        Page<ProductCardEntity> result = repository.findAllByProduct_StatusAndProduct_ModerationStatus(
+                ProductStatus.ACTIVE,
+                ModerationStatus.APPROVED,
+                "electronics",
+                new BigDecimal("500.00"),
+                new BigDecimal("900.00"),
+                PageRequest.of(1, 1, Sort.by("product.price"))
+        );
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent())
+                .extracting(card -> card.getProduct().getPublicId())
+                .containsExactly(upperBoundary.getPublicId());
+    }
+
+    private ProductEntity saveCard(
+            UserEntity seller,
+            ProductStatus status,
+            ModerationStatus moderationStatus,
+            int quantity
+    ) {
+        UUID productId = UUID.randomUUID();
+        ProductCardEntity card = ProductTestFixtures.createProductCard(productId);
+        ProductEntity product = card.getProduct();
+        product.setSlug("test-" + productId);
+        product.setSeller(seller);
+        product.setCategory(productCategoryRepository.findBySlug("electronics").orElseThrow());
+        product.setStatus(status);
+        product.setModerationStatus(moderationStatus);
+        card.setProduct(productRepository.save(product));
+        repository.save(card);
+        stockRepository.save(new ProductStockEntity(null, card.getProduct(), quantity));
+        return card.getProduct();
     }
 
     private UserEntity createSeller() {

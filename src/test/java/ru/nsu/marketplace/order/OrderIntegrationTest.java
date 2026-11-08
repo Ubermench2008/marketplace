@@ -21,6 +21,7 @@ import ru.nsu.marketplace.cart.CartRepository;
 import ru.nsu.marketplace.order.dto.OrderResponse;
 import ru.nsu.marketplace.order.exception.OrderStateException;
 import ru.nsu.marketplace.product.ProductRepository;
+import ru.nsu.marketplace.product.ProductCategoryRepository;
 import ru.nsu.marketplace.product.model.ProductEntity;
 import ru.nsu.marketplace.user.Role;
 import ru.nsu.marketplace.user.UserEntity;
@@ -82,6 +83,9 @@ public class OrderIntegrationTest {
 
     @Autowired
     private ProductRepository productRepository;
+
+    @Autowired
+    private ProductCategoryRepository productCategoryRepository;
 
     @Autowired
     private CartRepository cartRepository;
@@ -253,6 +257,7 @@ public class OrderIntegrationTest {
         ProductEntity product = productRepository.save(ProductEntity.builder()
                 .publicId(UUID.randomUUID())
                 .slug(UUID.randomUUID().toString())
+                .category(productCategoryRepository.findBySlug("other").orElseThrow())
                 .name("Order test product")
                 .description("A sufficiently long product description for tests.")
                 .price(new BigDecimal("19.90"))
