@@ -378,7 +378,7 @@ export async function productEditor(view, id) {
                 ? '<p class="muted">Товар ожидает рассмотрения модератором.</p>' +
                   '<button type="button" class="button secondary" data-action="cancel-moderation">Отозвать и вернуться к редактированию</button>'
                 : ''
-        }${product.status === 'ARCHIVED' ? '<p class="muted">Товар в архиве. API восстановления пока не реализован.</p>' : ''}`;
+        }${product.status === 'ARCHIVED' ? '<p class="muted">Товар в архиве. Вернуть его в продажу нельзя.</p>' : ''}`;
         actions.querySelectorAll('[data-action]').forEach(
             (button) =>
                 (button.onclick = () =>
@@ -515,7 +515,7 @@ export async function productEditor(view, id) {
                     const reload = document.createElement('button');
                     reload.type = 'button';
                     reload.className = 'button secondary';
-                    reload.textContent = 'Проверить данные на сервере';
+                    reload.textContent = creating ? 'Перейти к списку товаров' : 'Обновить данные товара';
                     reload.onclick = async () => {
                         if (
                             await confirmAction(

@@ -107,11 +107,8 @@ export async function catalogPage(view) {
         `<div>` +
         `<div class="eyebrow">` +
         `<span class="live-dot">` +
-        `</span> МЕСТО ДЛЯ ВАШИХ НАХОДОК</div>` +
-        `<h1>Хорошие вещи.<br>` +
-        `<span>В одном месте.</span>` +
-        `</h1>` +
-        `<p>Выбирайте то, что вам по душе.<br>Собирайте свою корзину — остальное просто.</p>` +
+        `</span> МАРКЕТПЛЕЙС</div>` +
+        `<h1>Рядом</h1>` +
         `<a class="hero-link" href="#catalog-products">Посмотреть товары ${icon('arrow')}</a>` +
         `</div>` +
         `<div class="hero-art" aria-hidden="true">` +
@@ -119,17 +116,13 @@ export async function catalogPage(view) {
         `</span>` +
         `<span class="hero-orbit orbit-two">` +
         `</span>` +
-        `<div class="hero-sticker">сделано<br>для жизни<span>✳</span>` +
-        `</div>` +
         `<div class="hero-bag">${icon('bag')}<span>рядом↗</span>` +
         `</div>` +
-        `<span class="hero-caption">ВАША СЛЕДУЮЩАЯ НАХОДКА — ЗДЕСЬ</span>` +
         `</div>` +
         `</section>` +
         `<section id="catalog-products">` +
         `<div class="section-toolbar">` +
         `<div>` +
-        `<div class="eyebrow">ВЫБИРАЙТЕ СВОЁ</div>` +
         `<h2>Каталог <span class="catalog-total">` +
         `</span>` +
         `</h2>` +
@@ -314,18 +307,13 @@ export async function authPage(view, mode) {
     view.innerHTML =
         `<div class="auth-layout">` +
         `<section class="auth-story">` +
-        `<div class="eyebrow">РАДЫ, ЧТО ВЫ РЯДОМ</div>` +
-        `<h1>Маленькие находки.<br>` +
-        `<span>Большая радость.</span>` +
-        `</h1>` +
-        `<p>Соберите корзину из того, что нравится.<br>А мы сохраним ваши покупки в одном месте.</p>` +
+        `<h1>Рядом</h1>` +
         `<div class="auth-symbol" aria-hidden="true">✳</div>` +
-        `<div class="auth-story-footer">Ваше пространство для хороших вещей ↗</div>` +
         `</section>` +
         `<section class="auth-form-wrap">` +
         `<a class="back-link" href="#/catalog">← Вернуться в каталог</a>` +
-        `<h2>${register ? 'Давайте знакомиться' : 'С возвращением'}</h2>` +
-        `<p class="muted">${register ? 'Создайте аккаунт покупателя — это займёт минуту.' : 'Войдите по телефону или электронной почте.'}</p>` +
+        `<h2>${register ? 'Регистрация' : 'Вход'}</h2>` +
+        `<p class="muted">${register ? 'Регистрация аккаунта покупателя.' : 'Вход по телефону или электронной почте.'}</p>` +
         `<form class="stack-form">` +
         `<div class="form-error" role="alert" tabindex="-1" hidden>` +
         `</div>${
@@ -389,7 +377,7 @@ export async function authPage(view, mode) {
 
 export async function cartPage(view) {
     document.title = 'Корзина — Рядом';
-    view.innerHTML = `${pageHeading('ВАШИ НАХОДКИ', 'Корзина', 'Всё, что понравилось, — в одном месте.')}<div class="cart-content"></div>`;
+    view.innerHTML = `${pageHeading('ПОКУПКИ', 'Корзина')}<div class="cart-content"></div>`;
     const area = view.querySelector('.cart-content');
     let pending = false;
     const load = async (checkoutNotice = '') => {
