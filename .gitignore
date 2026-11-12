@@ -5,6 +5,7 @@ data/media/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
+/docs/code-cleanup.md
 
 ### STS ###
 .apt_generated
