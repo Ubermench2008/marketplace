@@ -1,6 +1,7 @@
 package ru.nsu.marketplace.media;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -8,6 +9,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import java.nio.file.Path;
 
 @Configuration
+@EnableConfigurationProperties(MediaStorageProperties.class)
 @RequiredArgsConstructor
 public class MediaResourceConfig implements WebMvcConfigurer {
     private final MediaStorageProperties properties;

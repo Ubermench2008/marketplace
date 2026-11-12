@@ -46,6 +46,17 @@ public class SecurityConfig {
                                 "/api/reviews/{reviewId}/replies/children"
                         ).permitAll()
 
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs.yaml"
+                        ).permitAll()
+
+
+
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
